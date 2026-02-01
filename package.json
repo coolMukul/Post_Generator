@@ -1,0 +1,28 @@
+{
+  "name": "post-generator",
+  "version": "1.0.0",
+  "description": "Research insight generation platform with multi-agent workflows",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter api dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "clean": "pnpm -r clean && rm -rf node_modules"
+  },
+  "keywords": [
+    "research",
+    "ai",
+    "langraph",
+    "fastify"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
