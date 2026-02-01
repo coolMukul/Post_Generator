@@ -499,6 +499,10 @@ Each agent includes:
 - **AI:** LangChain, LangGraph
 - **Embeddings:** Multi-provider (OpenAI, Voyage, Cohere)
 
+Ubuntu is installed on a Win 11 machine. User has sudo permissions. Ubuntu has Redis,  postgresql v14 and postgresql v16 installed with pgvector. Project uses postgresql v16.
+pg4Admin is also installed on win11 macine and remotely connected to Ubuntus' postgresql v16 server for any DB and table troubleshooting.
+
+
 ### Alternative Options for Future Learning
 - Frontend: SvelteKit, Remix
 - Backend: Express, Hono
