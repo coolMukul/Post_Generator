@@ -6,20 +6,21 @@ import Link from 'next/link';
 type SubmitMode = 'url' | 'file';
 
 interface JobResult {
-  documentId: string;
-  projectDocumentId: string;
-  jobId: string;
+  job_id: string;
   status: string;
+  created_at: string;
+  message?: string;
 }
 
 interface JobStatus {
-  id: string;
-  state: string;
-  progress: number;
-  data: any;
-  returnvalue?: any;
-  failedReason?: string;
-  logs?: string[];
+  job_id: string;
+  status: 'pending' | 'in_progress' | 'success' | 'failed';
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  result?: any;
+  error?: string | null;
+  progress?: number;
 }
 
 export default function IngestPage() {
@@ -35,17 +36,17 @@ export default function IngestPage() {
 
   // Poll job status
   useEffect(() => {
-    if (!result?.jobId || !polling) return;
+    if (!result?.job_id || !polling) return;
 
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`http://localhost:3101/queue/jobs/${result.jobId}`);
+        const response = await fetch(`http://localhost:3000/jobs/${result.job_id}`);
         if (response.ok) {
           const data = await response.json();
           setJobStatus(data);
-          
+
           // Stop polling if job is complete or failed
-          if (data.state === 'completed' || data.state === 'failed') {
+          if (data.status === 'success' || data.status === 'failed') {
             setPolling(false);
           }
         }
@@ -55,7 +56,7 @@ export default function IngestPage() {
     }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(interval);
-  }, [result?.jobId, polling]);
+  }, [result?.job_id, polling]);
 
   const handleSubmitUrl = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,19 +66,18 @@ export default function IngestPage() {
     setJobStatus(null);
 
     try {
-      const response = await fetch('http://localhost:3101/documents/submit-url', {
+      const response = await fetch('http://localhost:3000/pdf/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url,
           title: title || undefined,
-          projectKey: 'researchpaper',
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP ${response.status}`);
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
@@ -94,70 +94,25 @@ export default function IngestPage() {
 
   const handleSubmitFile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
-
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setJobStatus(null);
-
-    try {
-      // Convert file to base64
-      const reader = new FileReader();
-      const base64Content = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(',')[1]); // Remove data:...;base64, prefix
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const response = await fetch('http://localhost:3101/documents/submit-file', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          fileType: file.type || 'application/pdf',
-          fileSize: file.size,
-          projectKey: 'researchpaper',
-          base64Content,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      setResult(data);
-      setPolling(true); // Start polling for job status
-      setTitle('');
-      setFile(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    setError('File upload is not yet implemented in the API. Please use URL submission for now.');
   };
 
-  const getStatusColor = (state: string) => {
-    switch (state) {
-      case 'completed': return '#10b981';
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'success': return '#10b981';
       case 'failed': return '#ef4444';
-      case 'active': return '#3b82f6';
-      case 'waiting': return '#f59e0b';
+      case 'in_progress': return '#3b82f6';
+      case 'pending': return '#f59e0b';
       default: return '#6b7280';
     }
   };
 
-  const getStatusIcon = (state: string) => {
-    switch (state) {
-      case 'completed': return '✓';
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'success': return '✓';
       case 'failed': return '✗';
-      case 'active': return '⟳';
-      case 'waiting': return '⏳';
+      case 'in_progress': return '⟳';
+      case 'pending': return '⏳';
       default: return '◯';
     }
   };
@@ -190,9 +145,10 @@ export default function IngestPage() {
           <button
             onClick={() => setMode('file')}
             className={`btn ${mode === 'file' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ flex: 1 }}
+            style={{ flex: 1, opacity: 0.5, cursor: 'not-allowed' }}
+            title="File upload not yet implemented in API"
           >
-            📤 Upload File
+            📤 Upload File (Coming Soon)
           </button>
         </div>
 
@@ -281,64 +237,63 @@ export default function IngestPage() {
         {result && (
           <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '0.5rem' }}>
             <h3 style={{ fontWeight: '600', marginBottom: '1rem', color: '#0369a1' }}>
-              Job Queued Successfully
+              {result.message || 'Job Queued Successfully'}
             </h3>
             <div style={{ fontSize: '0.875rem', color: '#0c4a6e' }}>
-              <p><strong>Document ID:</strong> <code>{result.documentId}</code></p>
-              <p><strong>Job ID:</strong> <code>{result.jobId}</code></p>
+              <p><strong>Job ID:</strong> <code>{result.job_id}</code></p>
+              <p><strong>Status:</strong> <code>{result.status}</code></p>
+              <p><strong>Created:</strong> <code>{new Date(result.created_at).toLocaleString()}</code></p>
             </div>
 
             {/* Real-time job status */}
             {jobStatus && (
               <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'white', borderRadius: '0.375rem', border: '1px solid #e5e7eb' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>{getStatusIcon(jobStatus.state)}</span>
-                  <strong style={{ color: getStatusColor(jobStatus.state) }}>
-                    {jobStatus.state.toUpperCase()}
+                  <span style={{ fontSize: '1.5rem' }}>{getStatusIcon(jobStatus.status)}</span>
+                  <strong style={{ color: getStatusColor(jobStatus.status) }}>
+                    {jobStatus.status.toUpperCase().replace('_', ' ')}
                   </strong>
                 </div>
-                
-                {jobStatus.progress > 0 && (
+
+                {jobStatus.progress !== undefined && jobStatus.progress > 0 && (
                   <div style={{ marginTop: '0.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
                       <span>Progress</span>
                       <span>{jobStatus.progress}%</span>
                     </div>
                     <div style={{ width: '100%', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ 
-                        width: `${jobStatus.progress}%`, 
-                        height: '100%', 
-                        backgroundColor: getStatusColor(jobStatus.state),
+                      <div style={{
+                        width: `${jobStatus.progress}%`,
+                        height: '100%',
+                        backgroundColor: getStatusColor(jobStatus.status),
                         transition: 'width 0.3s ease'
                       }} />
                     </div>
                   </div>
                 )}
 
-                {jobStatus.logs && jobStatus.logs.length > 0 && (
-                  <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#666' }}>
-                    <strong>Latest Log:</strong>
-                    <p style={{ marginTop: '0.25rem', fontFamily: 'monospace', backgroundColor: '#f9fafb', padding: '0.5rem', borderRadius: '0.25rem' }}>
-                      {jobStatus.logs[jobStatus.logs.length - 1]}
-                    </p>
-                  </div>
-                )}
-
-                {jobStatus.state === 'completed' && jobStatus.returnvalue && (
+                {jobStatus.status === 'success' && jobStatus.result && (
                   <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: '#d1fae5', borderRadius: '0.375rem' }}>
                     <p style={{ fontSize: '0.875rem', color: '#065f46' }}>
                       ✓ Document processed successfully!
-                      {jobStatus.returnvalue.chunksProcessed && (
-                        <span> ({jobStatus.returnvalue.chunksProcessed} chunks embedded)</span>
-                      )}
                     </p>
+                    {jobStatus.result.chunks_processed && (
+                      <p style={{ fontSize: '0.75rem', color: '#065f46', marginTop: '0.25rem' }}>
+                        Processed {jobStatus.result.chunks_processed} chunks
+                      </p>
+                    )}
+                    {jobStatus.result.document_id && (
+                      <p style={{ fontSize: '0.75rem', color: '#065f46', marginTop: '0.25rem' }}>
+                        Document ID: <code>{jobStatus.result.document_id}</code>
+                      </p>
+                    )}
                   </div>
                 )}
 
-                {jobStatus.state === 'failed' && (
+                {jobStatus.status === 'failed' && (
                   <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: '#fee2e2', borderRadius: '0.375rem' }}>
                     <p style={{ fontSize: '0.875rem', color: '#991b1b' }}>
-                      ✗ {jobStatus.failedReason || 'Job failed'}
+                      ✗ {jobStatus.error || 'Job failed'}
                     </p>
                   </div>
                 )}
@@ -355,9 +310,20 @@ export default function IngestPage() {
           </div>
         )}
 
-        {/* Pipeline Info */}
-
+        {/* API Info */}
         <div className="alert alert-info" style={{ marginTop: '2rem' }}>
+          <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>🔌 API Endpoints</h3>
+          <div style={{ fontSize: '0.875rem' }}>
+            <p><strong>Submit PDF:</strong> <code>POST http://localhost:3000/pdf/process</code></p>
+            <p><strong>Job Status:</strong> <code>GET http://localhost:3000/jobs/:jobId</code></p>
+            <p style={{ marginTop: '0.5rem', color: '#666' }}>
+              Make sure your API server is running on port 3000
+            </p>
+          </div>
+        </div>
+
+        {/* Pipeline Info */}
+        <div className="alert alert-info" style={{ marginTop: '1rem' }}>
           <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>📋 Pipeline Steps</h3>
           <ol style={{ fontSize: '0.875rem', paddingLeft: '1.25rem', margin: 0 }}>
             <li>Download PDF from URL</li>
