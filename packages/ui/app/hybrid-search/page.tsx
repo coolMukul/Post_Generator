@@ -1,423 +1,411 @@
- 'use client';
- import React from 'react';
+'use client';
 
- import { useState } from 'react';
- import Link from 'next/link';
+import { useState } from 'react';
+import Link from 'next/link';
 
- interface SearchResult {
-   id: string;
-   documentId: string;
-   documentTitle?: string;
-   chunkIndex: number;
-   content: string;
-   contextSummary: string | null;
-   score: number;
-   rankSource: 'vector' | 'keyword' | 'hybrid';
-   metadata: Record<string, any>;
- }
+interface HybridSearchResult {
+  id: string;
+  document_id: string;
+  document_title?: string;
+  chunk_index: number;
+  content: string;
+  context_summary: string | null;
+  score: number;
+  rank_source: 'vector' | 'keyword' | 'hybrid';
+  metadata: Record<string, any>;
+}
 
- interface SearchResponse {
-   success: boolean;
-   query: string;
-   searchMode: string;
-   resultsCount: number;
-   results: SearchResult[];
-   error?: string;
- }
+interface HybridSearchResponse {
+  results: HybridSearchResult[];
+  query: string;
+  project_key: string;
+  total: number;
+  config: {
+    vector_weight: number;
+    keyword_weight: number;
+    rrf_k: number;
+  };
+}
 
- const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3101';
+export default function HybridSearchPage() {
+  // Get API base URL from environment variable
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3201';
 
- export default function SearchPage() {
-   const [query, setQuery] = useState('');
-   const [searchMode, setSearchMode] = useState<'hybrid' | 'vector' | 'keyword'>('hybrid');
-  const [limit, setLimit] = useState(10);
-  // UI shows percentage (0-100). Convert to decimal when sending to API.
+  const [query, setQuery] = useState('');
+  const [projectKey, setProjectKey] = useState('researchpaper');
+  const [limit, setLimit] = useState(20);
   const [minScorePercent, setMinScorePercent] = useState(30);
-   const [vectorWeight, setVectorWeight] = useState(0.7);
-   const [keywordWeight, setKeywordWeight] = useState(0.3);
-   
-   const [loading, setLoading] = useState(false);
-   const [results, setResults] = useState<SearchResult[]>([]);
-   const [searchInfo, setSearchInfo] = useState<{ query: string; mode: string; count: number } | null>(null);
-   const [error, setError] = useState<string | null>(null);
-   const [totalDocs, setTotalDocs] = useState<number | null>(null);
-   const [jobId, setJobId] = useState<string | null>(null);
-   const [jobStatus, setJobStatus] = useState<string>('');
-   const [nextPollIn, setNextPollIn] = useState<number>(0);
-   
-   // Fetch total document count on mount
-   React.useEffect(() => {
-     fetch(`${API_BASE}/documents/count`)
-       .then(res => res.json())
-       .then(data => setTotalDocs(data.count))
-       .catch(() => setTotalDocs(null));
-   }, []);
+  const [vectorWeight, setVectorWeight] = useState(0.7);
+  const [keywordWeight, setKeywordWeight] = useState(0.3);
+  const [rrfK, setRrfK] = useState(60);
 
-   const handleSearch = async (e: React.FormEvent) => {
-     e.preventDefault();
-     
-     if (!query.trim()) {
-       setError('Please enter a search query');
-       return;
-     }
+  const [loading, setLoading] = useState(false);
+  const [response, setResponse] = useState<HybridSearchResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-     setLoading(true);
-     setError(null);
-     setResults([]);
-     setSearchInfo(null);
-     setJobId(null);
-     setJobStatus('submitting');
-     setNextPollIn(0);
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-     try {
-       // Submit search job
-       const submitResponse = await fetch(`${API_BASE}/search/submit`, {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
+    if (!query.trim()) {
+      setError('Please enter a search query');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/hybrid-search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query,
-          searchMode,
+          query: query.trim(),
+          project_key: projectKey,
           limit,
-          minScore: Math.max(0, Math.min(1, minScorePercent / 100)),
-          vectorWeight,
-          keywordWeight,
+          min_score: minScorePercent / 100,
+          vector_weight: vectorWeight,
+          keyword_weight: keywordWeight,
+          rrf_k: rrfK,
         }),
-       });
+      });
 
-       const submitData = await submitResponse.json();
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
 
-       if (!submitData.jobId) {
-         throw new Error('Failed to submit search job');
-       }
+      const data: HybridSearchResponse = await res.json();
+      setResponse(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to perform search');
+      console.error('Search error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-       const newJobId = submitData.jobId as string;
-       setJobId(newJobId);
-       setJobStatus('queued');
+  const getRankSourceColor = (source: string) => {
+    switch (source) {
+      case 'vector': return '#3b82f6';
+      case 'keyword': return '#10b981';
+      case 'hybrid': return '#8b5cf6';
+      default: return '#6b7280';
+    }
+  };
 
-       // Poll for job completion
-       pollJobStatus(newJobId);
-     } catch (err: any) {
-       setError(err.message || 'Failed to submit search');
-       console.error('Search submit error:', err);
-       setLoading(false);
-     }
-   };
+  const getScoreColor = (score: number) => {
+    if (score >= 0.8) return '#10b981';
+    if (score >= 0.6) return '#3b82f6';
+    if (score >= 0.4) return '#f59e0b';
+    return '#6b7280';
+  };
 
-   const pollJobStatus = async (jobId: string) => {
-     const pollInterval = 60; // Poll every 60 seconds
-     let countdownInterval: NodeJS.Timeout;
+  return (
+    <div className="container" style={{ maxWidth: '1200px', padding: '2rem' }}>
+      <div style={{ marginBottom: '1.5rem' }}>
+        <Link href="/" style={{ color: '#667eea', textDecoration: 'none', fontWeight: '600' }}>
+          ← Back to Home
+        </Link>
+      </div>
 
-     const poll = async () => {
-       try {
-         // Use existing queue endpoint
-         const statusResponse = await fetch(`${API_BASE}/queue/jobs/${jobId}`);
-         const statusData = await statusResponse.json();
+      <div className="card">
+        <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+          🔍 Hybrid Retrieval System
+        </h1>
+        <p style={{ color: '#666', marginBottom: '2rem' }}>
+          Phase 3: Search combining vector similarity and keyword matching
+        </p>
 
-         setJobStatus(statusData.state || statusData.status || 'unknown');
+        <form onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Query Input */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+              Search Query *
+            </label>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="e.g., transformer architecture, attention mechanisms, BERT..."
+              className="input"
+              required
+            />
+          </div>
 
-         if (statusData.state === 'completed' || statusData.status === 'completed') {
-           // Job completed successfully
-           clearInterval(countdownInterval);
-           const result = statusData.returnvalue || statusData.result || {};
-           setResults(result.results || []);
-           setSearchInfo({
-             query: result.query || query,
-             mode: result.searchMode || searchMode,
-             count: result.resultsCount || (result.results || []).length,
-           });
-           setLoading(false);
-           setNextPollIn(0);
-           return;
-         }
+          {/* Search Parameters */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                Max Results: {limit}
+              </label>
+              <input
+                type="range"
+                min="5"
+                max="50"
+                step="5"
+                value={limit}
+                onChange={(e) => setLimit(parseInt(e.target.value))}
+                style={{ width: '100%' }}
+              />
+            </div>
 
-         if (statusData.state === 'failed' || statusData.status === 'failed') {
-           // Job failed
-           clearInterval(countdownInterval);
-           setError(statusData.failedReason || statusData.error || 'Search job failed');
-           setLoading(false);
-           setNextPollIn(0);
-           return;
-         }
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                Min Score: {minScorePercent}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={minScorePercent}
+                onChange={(e) => setMinScorePercent(parseInt(e.target.value))}
+                style={{ width: '100%' }}
+              />
+            </div>
 
-         // Job still processing, schedule next poll
-         setNextPollIn(pollInterval);
-         
-         // Start countdown
-         let timeLeft = pollInterval;
-         countdownInterval = setInterval(() => {
-           timeLeft--;
-           setNextPollIn(timeLeft);
-           if (timeLeft <= 0) {
-             clearInterval(countdownInterval);
-           }
-         }, 1000);
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                Vector Weight: {vectorWeight.toFixed(1)}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={vectorWeight}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setVectorWeight(v);
+                  setKeywordWeight(parseFloat((1 - v).toFixed(1)));
+                }}
+                style={{ width: '100%' }}
+              />
+            </div>
 
-         // Schedule next poll
-         setTimeout(() => {
-           clearInterval(countdownInterval);
-           poll();
-         }, pollInterval * 1000);
-       } catch (err: any) {
-         clearInterval(countdownInterval);
-         setError(err.message || 'Failed to check search status');
-         console.error('Job status check error:', err);
-         setLoading(false);
-         setNextPollIn(0);
-       }
-     };
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                Keyword Weight: {keywordWeight.toFixed(1)}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={keywordWeight}
+                onChange={(e) => {
+                  const k = parseFloat(e.target.value);
+                  setKeywordWeight(k);
+                  setVectorWeight(parseFloat((1 - k).toFixed(1)));
+                }}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
 
-     poll();
-   };
+          {/* Advanced Settings */}
+          <details>
+            <summary style={{ cursor: 'pointer', fontWeight: '600', color: '#667eea' }}>
+              Advanced Settings
+            </summary>
+            <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                  RRF Constant (k): {rrfK}
+                  <span style={{ fontSize: '0.75rem', color: '#666', marginLeft: '0.5rem' }}>
+                    (higher = more conservative ranking)
+                  </span>
+                </label>
+                <input
+                  type="range"
+                  min="20"
+                  max="100"
+                  step="10"
+                  value={rrfK}
+                  onChange={(e) => setRrfK(parseInt(e.target.value))}
+                  style={{ width: '100%' }}
+                />
+              </div>
 
-   const getRankSourceColor = (source: string) => {
-     switch (source) {
-       case 'vector': return 'bg-blue-100 text-blue-800';
-       case 'keyword': return 'bg-green-100 text-green-800';
-       case 'hybrid': return 'bg-purple-100 text-purple-800';
-       default: return 'bg-gray-100 text-gray-800';
-     }
-   };
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                  Project Key
+                </label>
+                <input
+                  type="text"
+                  value={projectKey}
+                  onChange={(e) => setProjectKey(e.target.value)}
+                  className="input"
+                />
+              </div>
+            </div>
+          </details>
 
-   const getScoreColor = (score: number) => {
-     if (score >= 0.8) return 'text-green-600 font-bold';
-     if (score >= 0.6) return 'text-blue-600 font-semibold';
-     if (score >= 0.4) return 'text-yellow-600';
-     return 'text-gray-600';
-   };
+          {/* Search Button */}
+          <button
+            type="submit"
+            disabled={loading || !query.trim()}
+            className="btn btn-primary"
+          >
+            {loading ? '⏳ Searching...' : '🔍 Search Documents'}
+          </button>
+        </form>
 
-   return (
-     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-8 text-[1.25rem] md:text-[1.35rem]">
-       <div className="max-w-3xl w-full">
-         {/* Header */}
-         <div className="text-center mb-10">
-           <Link href="/" className="text-white/80 hover:text-white mb-4 inline-block text-lg md:text-xl">
-             ← Back to Home
-           </Link>
-           <h1 className="text-5xl font-extrabold text-white mb-2">
-             <span role="img" aria-label="search">🔍</span> Hybrid Retrieval System
-           </h1>
-           <p className="text-white/90 text-2xl mb-2">
-             Phase 3: Search and retrieve relevant research insights
-           </p>
-           {totalDocs !== null && (
-             <div className="text-blue-200 text-lg mt-2">Total documents in DB: <b>{totalDocs}</b></div>
-           )}
-         </div>
+        {/* Error */}
+        {error && (
+          <div className="alert alert-error" style={{ marginTop: '1rem' }}>
+            <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>✗ Error</h3>
+            <p style={{ fontSize: '0.875rem' }}>{error}</p>
+          </div>
+        )}
 
-         {/* Main Card */}
-         <div className="bg-white rounded-2xl shadow-2xl p-10 mb-8">
-           <form onSubmit={handleSearch} className="space-y-6">
-             {/* Query Input */}
-             <div>
-               <label className="block text-gray-700 font-semibold mb-2 text-sm">
-                 Search Query *
-               </label>
-               <input
-                 type="text"
-                 value={query}
-                 onChange={(e) => setQuery(e.target.value)}
-                 placeholder="e.g., transformer architecture, attention mechanisms, BERT..."
-                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                 required
-               />
-             </div>
+        {/* Search Info */}
+        {response && (
+          <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '0.5rem' }}>
+            <div style={{ fontSize: '0.875rem', color: '#0c4a6e' }}>
+              <p><strong>Query:</strong> "{response.query}"</p>
+              <p><strong>Results:</strong> {response.total} found</p>
+              <p><strong>Project:</strong> {response.project_key}</p>
+              <p>
+                <strong>Weights:</strong> Vector: {response.config.vector_weight.toFixed(1)} |
+                Keyword: {response.config.keyword_weight.toFixed(1)} |
+                RRF-k: {response.config.rrf_k}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
-             {/* Search Options Row */}
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               {/* Search Mode */}
-               <div>
-                 <label className="block text-gray-700 font-semibold mb-2 text-sm">
-                   Search Mode
-                 </label>
-                 <select
-                   value={searchMode}
-                   onChange={(e) => setSearchMode(e.target.value as any)}
-                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
-                 >
-                   <option value="hybrid">Hybrid (Best Overall)</option>
-                   <option value="vector">Vector (Semantic)</option>
-                   <option value="keyword">Keyword (Exact)</option>
-                 </select>
-               </div>
+      {/* Results */}
+      {response && response.results.length > 0 && (
+        <div style={{ marginTop: '2rem' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+            Search Results ({response.results.length})
+          </h2>
 
-               {/* Limit */}
-               <div>
-                 <label className="block text-gray-700 font-semibold mb-2 text-sm">
-                   Max Results: {limit}
-                 </label>
-                 <input
-                   type="range"
-                   min="5"
-                   max="50"
-                   step="5"
-                   value={limit}
-                   onChange={(e) => setLimit(parseInt(e.target.value))}
-                   className="w-full accent-blue-600"
-                 />
-               </div>
-             </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {response.results.map((result, idx) => (
+              <div
+                key={result.id}
+                className="card"
+                style={{ borderLeft: `4px solid ${getRankSourceColor(result.rank_source)}` }}
+              >
+                {/* Result Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.75rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#9ca3af' }}>
+                        #{idx + 1}
+                      </span>
+                      {result.document_title && (
+                        <h3 style={{ fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>
+                          {result.document_title}
+                        </h3>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
+                      Chunk {result.chunk_index} • ID: {result.document_id.substring(0, 8)}...
+                    </div>
+                  </div>
 
-             {/* Min Score and Advanced */}
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div>
-                 <label className="block text-gray-700 font-semibold mb-2 text-sm flex items-center gap-2">
-                   Min Score: {minScorePercent}%
-                   <span title="Only results with a score above this threshold are shown. Lower to see more, raise to see only the best matches." className="text-blue-400 cursor-help text-base">ⓘ</span>
-                 </label>
-                 <input
-                   type="range"
-                   min="0"
-                   max="100"
-                   step="1"
-                   value={minScorePercent}
-                   onChange={(e) => setMinScorePercent(parseInt(e.target.value))}
-                   className="w-full accent-blue-600"
-                 />
-               </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'end', gap: '0.25rem' }}>
+                    <span
+                      style={{
+                        fontSize: '1.5rem',
+                        fontWeight: 'bold',
+                        color: getScoreColor(result.score)
+                      }}
+                    >
+                      {(result.score * 100).toFixed(0)}%
+                    </span>
+                    <span style={{ fontSize: '0.625rem', color: '#6b7280' }}>
+                      {result.score.toFixed(4)}
+                    </span>
+                    <span
+                      style={{
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '0.25rem',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        backgroundColor: `${getRankSourceColor(result.rank_source)}20`,
+                        color: getRankSourceColor(result.rank_source)
+                      }}
+                    >
+                      {result.rank_source}
+                    </span>
+                  </div>
+                </div>
 
-               {searchMode === 'hybrid' && (
-                 <div>
-                   <label className="block text-gray-700 font-semibold mb-2 text-sm">
-                     Weights (V:{vectorWeight.toFixed(1)}/K:{keywordWeight.toFixed(1)})
-                   </label>
-                   <div className="flex gap-2">
-                     <input
-                       type="range"
-                       min="0"
-                       max="1"
-                       step="0.1"
-                       value={vectorWeight}
-                       onChange={(e) => {
-                         const v = parseFloat(e.target.value);
-                         setVectorWeight(v);
-                         setKeywordWeight(1 - v);
-                       }}
-                       className="w-full accent-blue-600"
-                     />
-                   </div>
-                 </div>
-               )}
-             </div>
+                {/* Context Summary */}
+                {result.context_summary && (
+                  <div
+                    style={{
+                      marginBottom: '0.75rem',
+                      padding: '0.75rem',
+                      backgroundColor: '#dbeafe',
+                      borderLeft: '3px solid #3b82f6',
+                      borderRadius: '0.25rem',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    <div style={{ fontWeight: '600', color: '#1e40af', marginBottom: '0.25rem' }}>
+                      Context:
+                    </div>
+                    <div style={{ color: '#1e3a8a' }}>
+                      {result.context_summary}
+                    </div>
+                  </div>
+                )}
 
-             {/* Search Button */}
-             <button
-               type="submit"
-               disabled={loading || !query.trim()}
-               className="w-full bg-blue-600 text-white py-4 rounded-lg font-bold text-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-             >
-               {loading ? (
-                 nextPollIn > 0 
-                   ? `🔄 ${jobStatus} - Next check in ${nextPollIn}s` 
-                   : `🔄 ${jobStatus === 'submitting' ? 'Submitting...' : jobStatus === 'queued' ? 'Queued...' : 'Checking status...'}`
-               ) : '🔍 Search Documents'}
-             </button>
-           </form>
+                {/* Content */}
+                <div style={{ fontSize: '0.875rem', color: '#374151', lineHeight: '1.6' }}>
+                  {result.content}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-           {/* Job Status Info */}
-           {loading && jobId && (
-             <div className="mt-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg">
-               <div className="flex items-center justify-between">
-                 <span><strong>Job ID:</strong> {jobId}</span>
-                 <span><strong>Status:</strong> {jobStatus}</span>
-               </div>
-               {nextPollIn > 0 && (
-                 <div className="mt-2 text-sm">
-                   Checking status again in <strong>{nextPollIn}</strong> seconds...
-                 </div>
-               )}
-             </div>
-           )}
+      {/* No Results */}
+      {response && response.results.length === 0 && (
+        <div className="card" style={{ marginTop: '2rem', textAlign: 'center', padding: '3rem' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🤷</div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+            No results found
+          </h3>
+          <p style={{ color: '#666', fontSize: '0.875rem' }}>
+            Try adjusting your query or lowering the minimum score threshold.
+          </p>
+        </div>
+      )}
 
-           {/* Error Message */}
-           {error && (
-             <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-               <strong>Error:</strong> {error}
-             </div>
-           )}
+      {/* API Info */}
+      <div className="alert alert-info" style={{ marginTop: '2rem' }}>
+        <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>🔌 API Endpoint</h3>
+        <div style={{ fontSize: '0.875rem' }}>
+          <p><strong>Hybrid Search:</strong> <code>POST {API_BASE_URL}/hybrid-search</code></p>
+          <p style={{ marginTop: '0.5rem', color: '#666' }}>
+            Combines vector similarity and keyword matching with RRF
+          </p>
+        </div>
+      </div>
 
-           {/* Search Info */}
-           {searchInfo && (
-             <div className="mt-6 pt-6 border-t border-gray-200 text-xl flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-               <div>
-                 <span className="text-gray-700">Query:</span>
-                 <span className="ml-2 font-bold text-gray-900">"{searchInfo.query}"</span>
-               </div>
-               <div className="flex gap-6 text-gray-700">
-                 <span>Mode: <b>{searchInfo.mode}</b></span>
-                 <span>Found: <b>{searchInfo.count}</b>{totalDocs !== null && (
-                   <span className="ml-2 text-gray-500">/ {totalDocs} docs</span>
-                 )}</span>
-               </div>
-             </div>
-           )}
-         </div>
-
-         {/* Results Section */}
-         {results && results.length > 0 && (
-           <div className="space-y-4 mt-6">
-             {results.map((result, idx) => (
-               <div
-                 key={result.id}
-                 className="bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition-shadow border border-gray-100"
-               >
-                 {/* Result Header */}
-                 <div className="flex items-start justify-between mb-3">
-                   <div className="flex-1">
-                     <div className="flex items-center gap-3 mb-1">
-                       <span className="text-xl font-bold text-gray-400">#{idx + 1}</span>
-                       {result.documentTitle && (
-                         <h3 className="text-base font-semibold text-gray-800">
-                           {result.documentTitle}
-                         </h3>
-                       )}
-                     </div>
-                     <div className="flex items-center gap-2 text-xs text-gray-500">
-                       <span>Chunk {result.chunkIndex}</span>
-                       {result.metadata?.pageNumber && (
-                         <>
-                           <span>•</span>
-                           <span>Page {result.metadata.pageNumber}</span>
-                         </>
-                       )}
-                     </div>
-                   </div>
-                   <div className="flex flex-col items-end gap-1">
-                     <span className={`text-xl font-bold ${getScoreColor(result.score)}`}>{(result.score * 100).toFixed(0)}%</span>
-                     <span className="text-xs text-gray-500">Score: {result.score.toFixed(4)}</span>
-                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getRankSourceColor(result.rankSource)}`}>{result.rankSource}</span>
-                   </div>
-                 </div>
-
-                 {/* Context Summary */}
-                 {result.contextSummary && (
-                   <div className="mb-3 p-3 bg-blue-50 border-l-3 border-blue-400 rounded text-xs">
-                     <div className="font-semibold text-blue-800 mb-1">Context:</div>
-                     <div className="text-blue-900">{result.contextSummary}</div>
-                   </div>
-                 )}
-
-                 {/* Content */}
-                 <div className="text-gray-700 leading-relaxed text-sm">
-                   {result.content}
-                 </div>
-               </div>
-             ))}
-           </div>
-         )}
-
-         {/* No Results */}
-         {!loading && searchInfo && (!results || results.length === 0) && (
-           <div className="bg-white rounded-xl shadow-md p-8 text-center border border-gray-100">
-             <div className="text-5xl mb-3">🤷</div>
-             <h3 className="text-lg font-semibold text-gray-800 mb-2">
-               No results found
-             </h3>
-             <p className="text-gray-600 text-sm">
-               Try adjusting your query or lowering the minimum score.
-             </p>
-           </div>
-         )}
-       </div>
-     </div>
-   );
- }
+      {/* How It Works */}
+      <div className="alert alert-info" style={{ marginTop: '1rem' }}>
+        <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>📚 How Hybrid Search Works</h3>
+        <ol style={{ fontSize: '0.875rem', paddingLeft: '1.25rem', margin: 0 }}>
+          <li><strong>Vector Search:</strong> Finds semantically similar content using embeddings</li>
+          <li><strong>Keyword Search:</strong> Finds exact keyword matches using BM25</li>
+          <li><strong>RRF Fusion:</strong> Intelligently merges both rankings</li>
+          <li><strong>Score Normalization:</strong> Results scored 0-1 (1 = perfect match)</li>
+        </ol>
+        <p style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.5rem' }}>
+          <strong>Tip:</strong> Use high vector weight (0.7-0.8) for semantic search,
+          high keyword weight (0.7-0.8) for exact matching, or balanced (0.5/0.5) for best overall results.
+        </p>
+      </div>
+    </div>
+  );
+}
