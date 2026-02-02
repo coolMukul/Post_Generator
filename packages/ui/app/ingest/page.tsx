@@ -40,7 +40,7 @@ export default function IngestPage() {
 
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`http://localhost:3000/jobs/${result.job_id}`);
+        const response = await fetch(`http://localhost:3201/jobs/${result.job_id}`);
         if (response.ok) {
           const data = await response.json();
           setJobStatus(data);
@@ -66,7 +66,7 @@ export default function IngestPage() {
     setJobStatus(null);
 
     try {
-      const response = await fetch('http://localhost:3000/pdf/process', {
+      const response = await fetch('http://localhost:3201/pdf/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -314,10 +314,10 @@ export default function IngestPage() {
         <div className="alert alert-info" style={{ marginTop: '2rem' }}>
           <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>🔌 API Endpoints</h3>
           <div style={{ fontSize: '0.875rem' }}>
-            <p><strong>Submit PDF:</strong> <code>POST http://localhost:3000/pdf/process</code></p>
-            <p><strong>Job Status:</strong> <code>GET http://localhost:3000/jobs/:jobId</code></p>
+            <p><strong>Submit PDF:</strong> <code>POST http://localhost:3201/pdf/process</code></p>
+            <p><strong>Job Status:</strong> <code>GET http://localhost:3201/jobs/:jobId</code></p>
             <p style={{ marginTop: '0.5rem', color: '#666' }}>
-              Make sure your API server is running on port 3000
+              Make sure your API server is running on port 3201
             </p>
           </div>
         </div>

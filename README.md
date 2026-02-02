@@ -60,8 +60,8 @@ cd ../..
 cd packages/api
 pnpm dev
 ```
-API will be available at: http://localhost:3000
-Swagger docs at: http://localhost:3000/documentation
+API will be available at: http://localhost:3201
+Swagger docs at: http://localhost:3201/documentation
 
 **Terminal 2 - Worker:**
 ```bash
@@ -70,16 +70,23 @@ source venv/bin/activate
 python -m src.worker
 ```
 
+**Terminal 3 - UI (Optional):**
+```bash
+cd packages/ui
+pnpm dev
+```
+UI will be available at: http://localhost:3202
+
 ### Testing the Setup
 
 1. **Check health:**
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3201/health
 ```
 
 2. **Submit a test job:**
 ```bash
-curl -X POST http://localhost:3000/pdf/process \
+curl -X POST http://localhost:3201/pdf/process \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com/sample.pdf",
@@ -89,20 +96,28 @@ curl -X POST http://localhost:3000/pdf/process \
 
 3. **Check job status:**
 ```bash
-curl http://localhost:3000/jobs/{job_id}
+curl http://localhost:3201/jobs/{job_id}
 ```
+
+4. **Or use the UI:**
+   - Navigate to http://localhost:3202/ingest
+   - Submit a PDF URL and watch real-time progress
 
 ## Project Structure
 
 ```
 post_generator/
 ├── packages/
-│   ├── api/              # Fastify Node.js API
+│   ├── api/              # Fastify Node.js API (port 3201)
 │   │   └── src/
 │   │       ├── routes/   # API endpoints
 │   │       ├── handlers/ # Business logic
 │   │       ├── config/   # Configuration
 │   │       └── types/    # TypeScript schemas
+│   ├── ui/               # Next.js UI (port 3202)
+│   │   └── app/
+│   │       ├── ingest/   # PDF ingestion page
+│   │       └── ...       # Other pages
 │   └── workers/          # Python background workers
 │       └── src/
 │           ├── jobs/     # Job processors
@@ -170,10 +185,20 @@ ruff check src/           # Lint code
 ## Tech Stack
 
 - **API:** Fastify, TypeScript, BullMQ, Zod
+- **UI:** Next.js, React, TypeScript, Tailwind CSS
 - **Workers:** Python, LangGraph, LangChain
 - **Database:** PostgreSQL, pgvector
 - **Queue:** Redis, BullMQ
 - **AI:** OpenAI, LlamaParse
+
+## Port Configuration
+
+- **API Server:** 3201
+- **UI Server:** 3202
+- **PostgreSQL:** 5432
+- **Redis:** 6379
+
+_(Ports 3000-3002 and 3100-3102 are reserved for other projects)_
 
 ## License
 

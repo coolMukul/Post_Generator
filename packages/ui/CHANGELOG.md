@@ -9,7 +9,7 @@ Updated the ingest page to work correctly with the Phase 2 API implementation.
 #### Changes Made:
 
 1. **API Endpoint Corrections**
-   - Changed from `http://localhost:3101` to `http://localhost:3000` (matching .env.example)
+   - Changed from `http://localhost:3101` to `http://localhost:3201` (matching .env.example)
    - Updated endpoint from `/documents/submit-url` to `/pdf/process`
    - Updated job status endpoint from `/queue/jobs/{jobId}` to `/jobs/{jobId}`
 
@@ -46,11 +46,17 @@ Updated the ingest page to work correctly with the Phase 2 API implementation.
 
 To test the ingest page:
 
-1. Ensure API server is running on port 3000
-2. Navigate to http://localhost:3001/ingest (or your UI port)
+1. Ensure API server is running on port 3201
+2. Navigate to http://localhost:3202/ingest
 3. Submit a PDF URL (e.g., arXiv paper URL)
 4. Watch the real-time job status updates
 5. Verify successful completion with document ID
+
+#### Port Configuration
+
+- **API Server:** Port 3201
+- **UI Server:** Port 3202
+- (Ports 3000-3002 and 3100-3102 are reserved for other projects)
 
 #### API Compatibility
 
