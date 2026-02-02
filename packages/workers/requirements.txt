@@ -1,5 +1,4 @@
 # Core dependencies
-python-bullmq>=0.1.0
 redis>=5.0.0
 psycopg[binary]>=3.1.0
 pgvector>=0.2.0
@@ -9,6 +8,10 @@ langchain>=0.1.0
 langchain-openai>=0.0.5
 langgraph>=0.0.20
 openai>=1.12.0
+
+# PDF Processing
+llama-parse>=0.4.0
+pypdf>=4.0.0
 
 # Data validation
 pydantic>=2.6.0
