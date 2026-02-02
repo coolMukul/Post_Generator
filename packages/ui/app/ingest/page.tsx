@@ -24,6 +24,9 @@ interface JobStatus {
 }
 
 export default function IngestPage() {
+  // Get API base URL from environment variable
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3201';
+
   const [mode, setMode] = useState<SubmitMode>('url');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -40,7 +43,7 @@ export default function IngestPage() {
 
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`http://localhost:3201/jobs/${result.job_id}`);
+        const response = await fetch(`${API_BASE_URL}/jobs/${result.job_id}`);
         if (response.ok) {
           const data = await response.json();
           setJobStatus(data);
@@ -56,7 +59,7 @@ export default function IngestPage() {
     }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(interval);
-  }, [result?.job_id, polling]);
+  }, [result?.job_id, polling, API_BASE_URL]);
 
   const handleSubmitUrl = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +69,7 @@ export default function IngestPage() {
     setJobStatus(null);
 
     try {
-      const response = await fetch('http://localhost:3201/pdf/process', {
+      const response = await fetch(`${API_BASE_URL}/pdf/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -314,10 +317,10 @@ export default function IngestPage() {
         <div className="alert alert-info" style={{ marginTop: '2rem' }}>
           <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>🔌 API Endpoints</h3>
           <div style={{ fontSize: '0.875rem' }}>
-            <p><strong>Submit PDF:</strong> <code>POST http://localhost:3201/pdf/process</code></p>
-            <p><strong>Job Status:</strong> <code>GET http://localhost:3201/jobs/:jobId</code></p>
+            <p><strong>Submit PDF:</strong> <code>POST {API_BASE_URL}/pdf/process</code></p>
+            <p><strong>Job Status:</strong> <code>GET {API_BASE_URL}/jobs/:jobId</code></p>
             <p style={{ marginTop: '0.5rem', color: '#666' }}>
-              Make sure your API server is running on port 3201
+              Make sure your API server is running at {API_BASE_URL}
             </p>
           </div>
         </div>
