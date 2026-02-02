@@ -13,55 +13,116 @@ A multi-agent research insight generation platform built with Fastify, Python wo
 
 ### Installation
 
+#### For Windows (PowerShell)
+
 1. **Clone and navigate to the repository:**
-```bash
+```powershell
 cd Post_Generator
 ```
 
 2. **Copy environment file:**
-```bash
-cp .env.example .env
+```powershell
+Copy-Item .env.example .env
 ```
 Edit `.env` with your actual configuration values.
 
-3. **Initialize database:**
-```bash
-# Connect to PostgreSQL
+3. **Create UI environment file:**
+```powershell
+Copy-Item packages\ui\.env.example packages\ui\.env
+# Or manually create packages\ui\.env with:
+# NEXT_PUBLIC_API_URL=http://localhost:3201
+```
+
+4. **Initialize database:**
+```powershell
+# Connect to PostgreSQL (adjust path if needed)
 psql -U postgres
 
 # In psql prompt:
 CREATE DATABASE post_generator;
 \c post_generator
-CREATE EXTENSION vector;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS vector;
 
 # Run the initialization script
 \i scripts/init_db.sql
 ```
 
-4. **Install Node.js dependencies:**
-```bash
+5. **Install Node.js dependencies:**
+```powershell
 npm install -g pnpm  # If not already installed
 pnpm install
 ```
 
-5. **Install Python dependencies:**
+6. **Install Python dependencies:**
+```powershell
+cd packages\workers
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+cd ..\..
+```
+
+#### For Linux/Mac (Bash)
+
+1. **Clone and navigate:**
 ```bash
+cd Post_Generator
+```
+
+2. **Copy environment files:**
+```bash
+cp .env.example .env
+cp packages/ui/.env.example packages/ui/.env
+```
+
+3. **Initialize database:**
+```bash
+psql -U postgres -c "CREATE DATABASE post_generator;"
+psql -U postgres -d post_generator < scripts/init_db.sql
+```
+
+4. **Install dependencies:**
+```bash
+npm install -g pnpm
+pnpm install
 cd packages/workers
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 cd ../..
 ```
 
 ### Running the Application
 
+#### Windows (PowerShell)
+
+**Terminal 1 - API Server:**
+```powershell
+cd packages\api
+pnpm dev
+```
+
+**Terminal 2 - Worker:**
+```powershell
+cd packages\workers
+.\venv\Scripts\activate
+python -m src.worker
+```
+
+**Terminal 3 - UI:**
+```powershell
+cd packages\ui
+pnpm dev
+```
+
+#### Linux/Mac (Bash)
+
 **Terminal 1 - API Server:**
 ```bash
 cd packages/api
 pnpm dev
 ```
-API will be available at: http://localhost:3201
-Swagger docs at: http://localhost:3201/documentation
 
 **Terminal 2 - Worker:**
 ```bash
@@ -70,14 +131,46 @@ source venv/bin/activate
 python -m src.worker
 ```
 
-**Terminal 3 - UI (Optional):**
+**Terminal 3 - UI:**
 ```bash
 cd packages/ui
 pnpm dev
 ```
-UI will be available at: http://localhost:3202
+
+**Access Points:**
+- API: http://localhost:3201
+- Swagger docs: http://localhost:3201/documentation
+- UI: http://localhost:3202
 
 ### Testing the Setup
+
+#### Windows (PowerShell)
+
+1. **Check health:**
+```powershell
+curl http://localhost:3201/health
+```
+
+2. **Submit a test job:**
+```powershell
+$body = @{
+    url = "https://arxiv.org/pdf/2301.00001.pdf"
+    title = "Test Document"
+    project_key = "researchpaper"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:3201/pdf/process" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Body $body
+```
+
+3. **Check job status:**
+```powershell
+curl http://localhost:3201/jobs/YOUR_JOB_ID_HERE
+```
+
+#### Linux/Mac (Bash)
 
 1. **Check health:**
 ```bash
@@ -89,19 +182,24 @@ curl http://localhost:3201/health
 curl -X POST http://localhost:3201/pdf/process \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://example.com/sample.pdf",
-    "title": "Test Document"
+    "url": "https://arxiv.org/pdf/2301.00001.pdf",
+    "title": "Test Document",
+    "project_key": "researchpaper"
   }'
 ```
 
 3. **Check job status:**
 ```bash
-curl http://localhost:3201/jobs/{job_id}
+curl http://localhost:3201/jobs/YOUR_JOB_ID_HERE
 ```
 
-4. **Or use the UI:**
-   - Navigate to http://localhost:3202/ingest
-   - Submit a PDF URL and watch real-time progress
+#### Using the UI (All Platforms)
+
+1. Navigate to http://localhost:3202/ingest
+2. Paste a PDF URL (e.g., arXiv paper)
+3. Add an optional title
+4. Click "Ingest Document"
+5. Watch real-time job progress
 
 ## Project Structure
 
