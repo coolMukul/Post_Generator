@@ -1,8 +1,10 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import path from 'path';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from project root
+// This allows the API to read .env from the root directory
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 // Environment schema
 const envSchema = z.object({
