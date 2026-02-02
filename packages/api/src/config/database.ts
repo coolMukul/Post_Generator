@@ -1,11 +1,13 @@
 import pg from 'pg';
-import { getDatabaseUrl } from './env.js';
+import { getDatabaseUrl, env } from './env.js';
 
 const { Pool } = pg;
 
 // Create PostgreSQL connection pool
+const connectionString = getDatabaseUrl();
+
 export const pool = new Pool({
-  connectionString: getDatabaseUrl(),
+  connectionString,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

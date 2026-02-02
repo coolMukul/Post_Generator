@@ -2,6 +2,8 @@
 import os
 from pydantic import Field
 from pydantic_settings import BaseSettings
+from pathlib import Path
+import logging
 
 
 class Settings(BaseSettings):
@@ -32,10 +34,12 @@ class Settings(BaseSettings):
     # Worker
     worker_concurrency: int = Field(default=5, alias="WORKER_CONCURRENCY")
 
-    class Config:
-        """Pydantic config."""
-        env_file = ".env"
-        case_sensitive = False
+    # Pydantic v2 model config: load env from repo root and ignore unknown env keys
+    model_config = {
+        "env_file": str(Path(__file__).resolve().parents[3] / '.env'),
+        "case_sensitive": False,
+        "extra": "ignore",
+    }
 
 
 # Global settings instance

@@ -1,10 +1,16 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Compute __dirname in ES module scope
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables from project root
-// This allows the API to read .env from the root directory
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+// This allows the API to read .env from the repository root
+// (__dirname is packages/api/src/config) -> go up four levels to repo root
+dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
 // Environment schema
 const envSchema = z.object({

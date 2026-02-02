@@ -2,8 +2,10 @@
 import hashlib
 from datetime import datetime
 from typing import Optional, Dict, Any
+import json
 import psycopg
 from psycopg.rows import dict_row
+from urllib.parse import urlparse, unquote
 
 
 class DocumentRepository:
@@ -30,6 +32,15 @@ class DocumentRepository:
         Returns:
             Created document dictionary
         """
+        # Ensure title and metadata defaults
+        if not title:
+            parsed = urlparse(url)
+            candidate = parsed.path.split('/')[-1] or parsed.netloc
+            title = unquote(candidate) or 'Untitled'
+
+        if metadata is None:
+            metadata = {}
+
         # Generate checksum from URL
         checksum = hashlib.sha256(url.encode()).hexdigest()
 
@@ -49,11 +60,11 @@ class DocumentRepository:
                 # Insert new document
                 cur.execute(
                     """
-                    INSERT INTO documents (url, title, checksum, metadata, created_at)
+                    INSERT INTO documents (source_url, title, checksum, metadata, created_at)
                     VALUES (%s, %s, %s, %s, %s)
                     RETURNING *
                     """,
-                    (url, title, checksum, metadata or {}, datetime.now())
+                    (url, title, checksum, json.dumps(metadata or {}), datetime.now())
                 )
                 document = cur.fetchone()
                 conn.commit()
@@ -117,7 +128,7 @@ class DocumentRepository:
                     WHERE id = %s
                     RETURNING *
                     """,
-                    (metadata, document_id)
+                    (json.dumps(metadata), document_id)
                 )
                 result = cur.fetchone()
                 conn.commit()

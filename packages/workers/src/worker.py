@@ -81,11 +81,53 @@ class BullMQWorker:
                 if job_id:
                     # Get job data
                     job_key = f"bull:{self.queue_name}:{job_id}"
-                    job_data_str = await self.redis.get(job_key)
+                    try:
+                        key_type = await self.redis.type(job_key)
+                    except Exception as e:
+                        logger.error(f"Failed to get key type for {job_key}: {e}")
+                        await asyncio.sleep(1)
+                        continue
+
+                    job_data_str = None
+                    if key_type == 'string':
+                        job_data_str = await self.redis.get(job_key)
+                    elif key_type == 'hash':
+                        # Bull stores job data in a hash; try common fields
+                        job_hash = await self.redis.hgetall(job_key)
+                        # Look for a field that likely contains JSON payload
+                        for candidate in ('data', 'json', 'payload', 'value'):
+                            if candidate in job_hash and job_hash[candidate]:
+                                job_data_str = job_hash[candidate]
+                                break
+                        # Fallback: if single-field hash, use its value
+                        if not job_data_str and len(job_hash) == 1:
+                            job_data_str = next(iter(job_hash.values()))
+                    elif key_type in ('list', 'set'):
+                        # If key holds a list/set, try to read the first element
+                        items = await self.redis.lrange(job_key, 0, 0) if key_type == 'list' else await self.redis.smembers(job_key)
+                        if items:
+                            # items may be a list or set; take first element
+                            job_data_str = items[0] if isinstance(items, list) else next(iter(items))
+                    else:
+                        logger.error(f"Unsupported Redis key type for job key {job_key}: {key_type}")
 
                     if job_data_str:
-                        job_data = json.loads(job_data_str)
-                        await self.process_job(job_data)
+                        try:
+                            parsed = json.loads(job_data_str)
+                        except Exception:
+                            parsed = job_data_str if isinstance(job_data_str, dict) else job_data_str
+
+                        # If parsed is the raw payload (contains 'url'), wrap into job object
+                        if isinstance(parsed, dict) and parsed.get('url'):
+                            job_obj = {'id': job_id, 'data': parsed}
+                        else:
+                            job_obj = parsed
+
+                        # Validate required field before processing
+                        if not job_obj or not (isinstance(job_obj, dict) and job_obj.get('data') and job_obj['data'].get('url')):
+                            logger.error('Job payload missing `url`. job_key=%s job_data_preview=%s', job_key, str(parsed)[:200])
+                        else:
+                            await self.process_job(job_obj)
                 else:
                     # No jobs available, wait a bit
                     await asyncio.sleep(1)

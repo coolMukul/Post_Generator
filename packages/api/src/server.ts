@@ -41,9 +41,10 @@ async function registerPlugins() {
         description: 'Research insight generation platform with multi-agent workflows',
         version: '1.0.0'
       },
+      // Use a browser-reachable host for Swagger UI (don't expose 0.0.0.0)
       servers: [
         {
-          url: `http://${env.API_HOST}:${env.API_PORT}`,
+          url: `http://${env.API_HOST === '0.0.0.0' ? 'localhost' : env.API_HOST}:${env.API_PORT}`,
           description: 'Development server'
         }
       ],
