@@ -139,6 +139,41 @@ export const QueryResponseSchema = z.object({
   total: z.number()
 });
 
+// Hybrid Search Schemas
+export const HybridSearchRequestSchema = z.object({
+  query: z.string().min(1).describe('Search query'),
+  project_key: z.string().optional().default('researchpaper').describe('Project key to search within'),
+  limit: z.number().min(1).max(100).default(20).optional().describe('Number of results'),
+  min_score: z.number().min(0).max(1).default(0.3).optional().describe('Minimum score threshold'),
+  vector_weight: z.number().min(0).max(1).default(0.7).optional().describe('Weight for vector search'),
+  keyword_weight: z.number().min(0).max(1).default(0.3).optional().describe('Weight for keyword search'),
+  rrf_k: z.number().min(1).default(60).optional().describe('RRF constant (higher = more conservative)')
+});
+
+export const HybridSearchResultSchema = z.object({
+  id: z.string().uuid(),
+  document_id: z.string().uuid(),
+  chunk_index: z.number(),
+  content: z.string(),
+  context_summary: z.string().nullable(),
+  score: z.number(),
+  metadata: z.record(z.unknown()),
+  rank_source: z.enum(['vector', 'keyword', 'hybrid']),
+  document_title: z.string().optional()
+});
+
+export const HybridSearchResponseSchema = z.object({
+  results: z.array(HybridSearchResultSchema),
+  query: z.string(),
+  project_key: z.string(),
+  total: z.number(),
+  config: z.object({
+    vector_weight: z.number(),
+    keyword_weight: z.number(),
+    rrf_k: z.number()
+  })
+});
+
 // Health Check Schema
 export const HealthCheckSchema = z.object({
   status: z.enum(['healthy', 'unhealthy']),
@@ -162,4 +197,7 @@ export type ProcessPdfRequest = z.infer<typeof ProcessPdfRequestSchema>;
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;
 export type QueryResult = z.infer<typeof QueryResultSchema>;
 export type QueryResponse = z.infer<typeof QueryResponseSchema>;
+export type HybridSearchRequest = z.infer<typeof HybridSearchRequestSchema>;
+export type HybridSearchResult = z.infer<typeof HybridSearchResultSchema>;
+export type HybridSearchResponse = z.infer<typeof HybridSearchResponseSchema>;
 export type HealthCheck = z.infer<typeof HealthCheckSchema>;
