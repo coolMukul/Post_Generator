@@ -29,7 +29,7 @@ export default function HomePage() {
           </div>
         </Link>
 
-        <Link href="/hybrid-search" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
+        <Link href="/hybrid-retrieval" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
             Hybrid Retrieval System
