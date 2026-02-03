@@ -348,12 +348,11 @@ src/
 ### Phase 3: Hardened Hybrid Retrieval & Indexing ✅
 **Goal:** Production-quality retrieval layer
 
-**Completed:**
-- [x] Validated schema with pgvector embedding and index
-- [x] Consistent embedding serialization on insert and query
-- [x] Automated index maintenance and reindex scripts
-- [x] End-to-end tests for vector and keyword search
-- [x] Job renaming to `hybrid_retrieval`, updated producers/workers
+- [ ] Validated schema with pgvector embedding and index
+- [ ] Consistent embedding serialization on insert and query
+- [ ] Automated index maintenance and reindex scripts
+- [ ] End-to-end tests for vector and keyword search
+- [ ] Job renaming to `hybrid_retrieval`, updated producers/workers
 
 **Learning focus:** Production readiness for vector stores, index tuning for ivfflat, reliable embedding serialization
 

@@ -1,5 +1,5 @@
 """
-Hybrid Search Repository
+Hybrid Retrieval Repository
 
 Implements hybrid retrieval combining:
 1. Vector similarity search (semantic) using pgvector
@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import psycopg
 from psycopg.rows import dict_row
 import re
+import logging
 
 
 @dataclass
@@ -36,8 +37,8 @@ class SearchResult:
 
 
 @dataclass
-class HybridSearchConfig:
-    """Configuration for hybrid search."""
+class HybridRetrievalConfig:
+    """Configuration for hybrid retrieval."""
     default_limit: int = 20
     default_min_score: float = 0.3
     default_vector_weight: float = 0.7
@@ -47,9 +48,9 @@ class HybridSearchConfig:
     enable_query_expansion: bool = True
 
 
-class HybridSearchRepository:
+class HybridRetrievalRepository:
     """
-    Repository for hybrid search operations.
+    Repository for hybrid retrieval operations.
 
     Combines vector similarity and keyword search for optimal retrieval.
     Uses Reciprocal Rank Fusion (RRF) for intelligent result merging.
@@ -58,17 +59,17 @@ class HybridSearchRepository:
     def __init__(
         self,
         connection_string: str,
-        config: Optional[HybridSearchConfig] = None
+        config: Optional[HybridRetrievalConfig] = None
     ):
         """
-        Initialize hybrid search repository.
+        Initialize hybrid retrieval repository.
 
         Args:
             connection_string: PostgreSQL connection string
-            config: Optional search configuration
+            config: Optional retrieval configuration
         """
         self.connection_string = connection_string
-        self.config = config or HybridSearchConfig()
+        self.config = config or HybridRetrievalConfig()
 
     def hybrid_retrieval(
         self,
@@ -157,9 +158,10 @@ class HybridSearchRepository:
         embedding_str = f"[{','.join(map(str, query_embedding))}]"
         min_score = self.config.vector_min_score
 
+        logger = logging.getLogger(__name__)
         with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
-                cur.execute(
+                sql = (
                     """
                     SELECT
                         dv.id,
@@ -179,11 +181,30 @@ class HybridSearchRepository:
                         AND 1 - (dv.embedding <=> %s::vector) >= %s
                     ORDER BY dv.embedding <=> %s::vector
                     LIMIT %s
-                    """,
-                    (embedding_str, project_key, embedding_str, min_score, embedding_str, limit)
+                    """
                 )
 
+                logger.info("📝 [VECTOR SEARCH] SQL prepared")
+                logger.info("📝 [VECTOR SEARCH] Params: embedding=%s, project=%s, min_score=%s, limit=%s", embedding_str[:120], project_key, min_score, limit)
+
+                # Check counts
+                try:
+                    cur.execute("SELECT COUNT(*) as count FROM document_vectors")
+                    dv_count = cur.fetchone()
+                    logger.info("📊 [VECTOR SEARCH] document_vectors count: %s", dv_count['count'])
+                except Exception:
+                    logger.warning("⚠️  [VECTOR SEARCH] Could not read document_vectors count")
+
+                try:
+                    cur.execute(sql, (embedding_str, project_key, embedding_str, min_score, embedding_str, limit))
+                except Exception as e:
+                    logger.error("❌ [VECTOR SEARCH] SQL execution failed: %s", str(e), exc_info=True)
+                    return []
+
                 results = cur.fetchall()
+                logger.info("📊 [VECTOR SEARCH] Raw rows returned: %d", len(results))
+                for idx, row in enumerate(results[:3]):
+                    logger.info("📄 [VECTOR SEARCH] Row %d: id=%s title=%s score=%s", idx+1, row.get('id'), (row.get('document_title') or '')[:80], row.get('score'))
 
                 # Return as list of (id, rank) tuples
                 return [
@@ -405,3 +426,188 @@ class HybridSearchRepository:
                 )
 
                 return [dict(row) for row in cur.fetchall()]
+
+    def keyword_search_fallback(
+        self,
+        query: str,
+        project_key: str,
+        limit: int = 20,
+        min_score: float = 0.3
+    ) -> List[Dict[str, Any]]:
+        """
+        Perform simple keyword search as a fallback when embeddings aren't available.
+        Searches against documents table using title and metadata.
+
+        Args:
+            query: Search query text
+            project_key: Project to search within (not used in fallback)
+            limit: Maximum number of results
+            min_score: Minimum score threshold (0-1)
+
+        Returns:
+            List of result dictionaries
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"🔎 [KEYWORD SEARCH] Starting search for: '{query}'")
+        logger.info(f"🔎 [KEYWORD SEARCH] Parameters: limit={limit}, min_score={min_score}, project_key={project_key}")
+        
+        with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                sql_query = """
+                    SELECT 
+                        d.id,
+                        d.id as document_id,
+                        0 as chunk_index,
+                        COALESCE(d.title, '') as content,
+                        d.title as document_title,
+                        NULL as context_summary,
+                        d.metadata,
+                        ts_rank_cd(
+                            to_tsvector('english', COALESCE(d.title, '') || ' ' || COALESCE(d.metadata::text, '')),
+                            plainto_tsquery('english', %s)
+                        ) as score
+                    FROM documents d
+                    WHERE to_tsvector('english', COALESCE(d.title, '') || ' ' || COALESCE(d.metadata::text, ''))
+                        @@ plainto_tsquery('english', %s)
+                    ORDER BY score DESC
+                    LIMIT %s
+                """
+                
+                logger.info(f"📝 [KEYWORD SEARCH] SQL Query: {sql_query.strip()}")
+                logger.info(f"📝 [KEYWORD SEARCH] Parameters: query='{query}', limit={limit}")
+                
+                # First, check if documents table exists and has data
+                cur.execute("SELECT COUNT(*) as count FROM documents")
+                doc_count = cur.fetchone()
+                logger.info(f"📊 [KEYWORD SEARCH] Total documents in table: {doc_count['count']}")
+                
+                # Check if any documents match the full-text search
+                cur.execute("""
+                    SELECT COUNT(*) as count FROM documents d
+                    WHERE to_tsvector('english', COALESCE(d.title, '') || ' ' || COALESCE(d.metadata::text, ''))
+                        @@ plainto_tsquery('english', %s)
+                """, (query,))
+                match_count = cur.fetchone()
+                logger.info(f"📊 [KEYWORD SEARCH] Documents matching query: {match_count['count']}")
+                
+                # If no matches, let's inspect a sample and attempt an ILIKE fallback
+                rows = []
+                if match_count['count'] == 0:
+                    cur.execute("SELECT id, title, metadata FROM documents LIMIT 5")
+                    sample_docs = cur.fetchall()
+                    logger.warning(f"⚠️  [KEYWORD SEARCH] No full-text matches found! Sample documents:")
+                    for doc in sample_docs:
+                        logger.warning(f"   - ID: {doc['id']}, Title: {doc.get('title', 'N/A')}")
+
+                    # Try a safe ILIKE substring fallback against title and metadata->>'title'
+                    try:
+                        ilike_sql = """
+                            SELECT
+                                d.id,
+                                d.id as document_id,
+                                0 as chunk_index,
+                                COALESCE(d.title, '') as content,
+                                d.title as document_title,
+                                NULL as context_summary,
+                                d.metadata,
+                                1.0 as score
+                            FROM documents d
+                            WHERE COALESCE(d.title, '') ILIKE %s
+                               OR COALESCE(d.metadata->>'title', '') ILIKE %s
+                            LIMIT %s
+                        """
+
+                        pattern = f"%{query}%"
+                        logger.info("📝 [KEYWORD SEARCH] Running ILIKE fallback with pattern=%s", pattern)
+                        cur.execute(ilike_sql, (pattern, pattern, limit))
+                        rows = cur.fetchall()
+                        logger.info("📊 [KEYWORD SEARCH] ILIKE fallback rows returned: %d", len(rows))
+
+                        # If still no rows, try individual token matching against metadata::text
+                        if not rows:
+                            try:
+                                tokens = [w.strip() for w in re.split(r"\s+", query) if w.strip()]
+                                if tokens:
+                                    # Build dynamic WHERE clause: metadata::text ILIKE %token% OR title ILIKE %token%
+                                    where_clauses = []
+                                    params = []
+                                    for tok in tokens:
+                                        where_clauses.append("COALESCE(d.metadata::text, '') ILIKE %s")
+                                        params.append(f"%{tok}%")
+                                        where_clauses.append("COALESCE(d.title, '') ILIKE %s")
+                                        params.append(f"%{tok}%")
+
+                                    meta_sql = f"""
+                                        SELECT
+                                            d.id,
+                                            d.id as document_id,
+                                            0 as chunk_index,
+                                            COALESCE(d.title, '') as content,
+                                            d.title as document_title,
+                                            NULL as context_summary,
+                                            d.metadata,
+                                            1.0 as score
+                                        FROM documents d
+                                        WHERE ({' OR '.join(where_clauses)})
+                                        LIMIT %s
+                                    """
+                                    params.append(limit)
+                                    logger.info("📝 [KEYWORD SEARCH] Running metadata::text token fallback with tokens=%s", tokens)
+                                    cur.execute(meta_sql, tuple(params))
+                                    rows = cur.fetchall()
+                                    logger.info("📊 [KEYWORD SEARCH] metadata::text token fallback rows returned: %d", len(rows))
+                            except Exception as e:
+                                logger.error("❌ [KEYWORD SEARCH] metadata token fallback failed: %s", str(e), exc_info=True)
+                    except Exception as e:
+                        logger.error("❌ [KEYWORD SEARCH] ILIKE fallback failed: %s", str(e), exc_info=True)
+                else:
+                    # Execute the main search query when full-text matches exist
+                    cur.execute(sql_query, (query, query, limit))
+                    rows = cur.fetchall()
+                
+                logger.info(f"📊 [KEYWORD SEARCH] Raw rows returned: {len(rows)}")
+                
+                if rows:
+                    for idx, row in enumerate(rows[:3]):  # Log first 3 for debugging
+                        logger.info(f"📄 [KEYWORD SEARCH] Row {idx+1}: id={row['id']}, title={row.get('document_title', 'N/A')[:50]}, score={row.get('score', 0)}")
+                
+                # Normalize scores and filter by min_score
+                max_score = max((row['score'] for row in rows), default=1.0)
+                logger.info(f"📊 [KEYWORD SEARCH] Max score: {max_score}")
+                
+                results = []
+                for row in rows:
+                    normalized_score = float(row['score']) / max_score if max_score > 0 else 0
+                    
+                    logger.debug(f"🔢 [KEYWORD SEARCH] Doc {row['id']}: raw_score={row['score']}, normalized={normalized_score}, min_score={min_score}")
+                    
+                    if normalized_score >= min_score:
+                        # Parse metadata if it's a string
+                        metadata = row.get('metadata')
+                        if isinstance(metadata, str):
+                            try:
+                                import json
+                                metadata = json.loads(metadata)
+                            except:
+                                metadata = {}
+                        elif metadata is None:
+                            metadata = {}
+                        
+                        results.append({
+                            'id': str(row['id']),
+                            'document_id': str(row['document_id']),
+                            'chunk_index': row['chunk_index'],
+                            'content': row['content'] or '',
+                            'context_summary': row['context_summary'],
+                            'score': normalized_score,
+                            'rank_source': 'keyword',
+                            'document_title': row['document_title'] or '',
+                            'metadata': metadata
+                        })
+                    else:
+                        logger.debug(f"❌ [KEYWORD SEARCH] Filtered out doc {row['id']} (score {normalized_score} < {min_score})")
+                
+                logger.info(f"✅ [KEYWORD SEARCH] Returning {len(results)} results after filtering")
+                return results

@@ -1,12 +1,12 @@
 """Repository layer for database operations."""
 from .document_repository import DocumentRepository
 from .vector_repository import VectorRepository
-from .hybrid_search_repository import HybridSearchRepository, SearchResult, HybridSearchConfig
+from .hybrid_retrieval_repository import HybridRetrievalRepository, SearchResult, HybridRetrievalConfig
 
 __all__ = [
     "DocumentRepository",
     "VectorRepository",
-    "HybridSearchRepository",
+    "HybridRetrievalRepository",
     "SearchResult",
-    "HybridSearchConfig"
+    "HybridRetrievalConfig",
 ]

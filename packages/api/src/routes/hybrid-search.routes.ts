@@ -2,11 +2,11 @@ import { FastifyInstance } from 'fastify';
 import { performHybridSearch } from '../handlers/hybrid-search.handler.js';
 import { HybridSearchRequestSchema } from '../types/schemas.js';
 
-export async function hybridSearchRoutes(fastify: FastifyInstance) {
+export async function hybridRetrievalRoutes(fastify: FastifyInstance) {
   fastify.post('/hybrid-search', {
     schema: {
       description: 'Perform hybrid retrieval combining vector and keyword search',
-      tags: ['Hybrid Search'],
+      tags: ['Hybrid Retrieval'],
       body: {
         type: 'object',
         required: ['query'],

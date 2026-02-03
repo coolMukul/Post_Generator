@@ -1,33 +1,59 @@
 import { HybridSearchRequest, HybridSearchResponse } from '../types/schemas.js';
+import { mainProcessingQueue, mainProcessingEvents } from '../config/queue.js';
 
 /**
- * Hybrid Search Handler
- *
- * Note: This is a placeholder that returns mock data for now.
- * The actual hybrid search will be implemented in the Python worker
- * and called through a queue-based architecture or direct database access.
- *
- * For now, this demonstrates the API contract.
+ * Hybrid Retrieval Handler
+ * 
+ * Submits hybrid retrieval requests to the worker queue for processing.
+ * The worker handles the actual retrieval using Python repositories with proper
+ * vector embeddings and keyword search capabilities.
  */
 export async function performHybridSearch(
   params: HybridSearchRequest
 ): Promise<HybridSearchResponse> {
-  // TODO: Implement actual hybrid search
-  // Options:
-  // 1. Call Python worker via queue + wait for result
-  // 2. Implement TypeScript version calling PostgreSQL directly
-  // 3. Create HTTP endpoint in Python service
+  const {
+    query,
+    project_key = 'researchpaper',
+    vector_weight = 0.7,
+    keyword_weight = 0.3,
+    rrf_k = 60
+  } = params;
 
-  // For now, return empty results with proper structure
-  return {
-    results: [],
-    query: params.query,
-    project_key: params.project_key || 'researchpaper',
-    total: 0,
-    config: {
-      vector_weight: params.vector_weight || 0.7,
-      keyword_weight: params.keyword_weight || 0.3,
-      rrf_k: params.rrf_k || 60
-    }
-  };
+  if (!query || query.trim() === '') {
+    return {
+      results: [],
+      query: query || '',
+      project_key,
+      total: 0,
+      config: { vector_weight, keyword_weight, rrf_k }
+    };
+  }
+
+  try {
+    // Add job to the main processing queue with 'hybrid-retrieval' job name
+    const job = await mainProcessingQueue.add('hybrid-retrieval', params, {
+      jobId: `retrieval-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+    });
+
+    // Wait for job to complete (with timeout)
+    const result = await job.waitUntilFinished(
+      mainProcessingEvents,
+      30000 // 30 second timeout
+    );
+
+    // Return the search results
+    return result as HybridSearchResponse;
+
+  } catch (error) {
+    console.error('Hybrid retrieval job failed:', error);
+    
+    // Return empty results on error rather than throwing
+    return {
+      results: [],
+      query,
+      project_key,
+      total: 0,
+      config: { vector_weight, keyword_weight, rrf_k }
+    };
+  }
 }

@@ -1,8 +1,8 @@
-import { pdfProcessingQueue } from '../config/queue.js';
+import { mainProcessingQueue } from '../config/queue.js';
 import { ProcessPdfJobData, JobResponse, JobStatus } from '../types/schemas.js';
 
 export const submitPdfProcessingJob = async (data: ProcessPdfJobData): Promise<JobResponse> => {
-  const job = await pdfProcessingQueue.add('process-pdf', data, {
+  const job = await mainProcessingQueue.add('process-pdf', data, {
     jobId: `pdf-${Date.now()}-${Math.random().toString(36).substring(7)}`,
   });
 

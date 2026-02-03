@@ -1,6 +1,5 @@
 import { FastifyInstance } from 'fastify';
 import { getHealthStatus } from '../handlers/health.handler.js';
-import { HealthCheckSchema } from '../types/schemas.js';
 
 export async function healthRoutes(fastify: FastifyInstance) {
   fastify.get('/health', {

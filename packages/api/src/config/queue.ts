@@ -26,13 +26,14 @@ export const testRedisConnection = async (): Promise<boolean> => {
 
 // Queue names
 export const QUEUE_NAMES = {
-  PDF_PROCESSING: 'pdf-processing',
+  MAIN_PROCESSING: 'main-processing-queue',
   VECTOR_GENERATION: 'vector-generation',
-  AGENT_TASKS: 'agent-tasks'
+  AGENT_TASKS: 'agent-tasks',
+  HYBRID_RETRIEVAL: 'hybrid-retrieval'
 } as const;
 
 // Create queues
-export const pdfProcessingQueue = new Queue(QUEUE_NAMES.PDF_PROCESSING, {
+export const mainProcessingQueue = new Queue(QUEUE_NAMES.MAIN_PROCESSING, {
   connection: redisConnection,
   defaultJobOptions: {
     attempts: 3,
@@ -72,18 +73,37 @@ export const agentTasksQueue = new Queue(QUEUE_NAMES.AGENT_TASKS, {
   },
 });
 
+export const hybridRetrievalQueue = new Queue(QUEUE_NAMES.HYBRID_RETRIEVAL, {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: {
+      type: 'exponential',
+      delay: 1000,
+    },
+    removeOnComplete: {
+      count: 50,
+      age: 3600, // 1 hour
+    },
+    removeOnFail: {
+      count: 100,
+    },
+  },
+});
+
 // Queue events for monitoring
-export const pdfProcessingEvents = new QueueEvents(QUEUE_NAMES.PDF_PROCESSING, {
+export const mainProcessingEvents = new QueueEvents(QUEUE_NAMES.MAIN_PROCESSING, {
   connection: redisConnection,
 });
 
 // Graceful shutdown
 export const closeQueueConnections = async (): Promise<void> => {
   await Promise.all([
-    pdfProcessingQueue.close(),
+    mainProcessingQueue.close(),
     vectorGenerationQueue.close(),
     agentTasksQueue.close(),
-    pdfProcessingEvents.close(),
+    hybridRetrievalQueue.close(),
+    mainProcessingEvents.close(),
     redisClient.quit(),
   ]);
 };

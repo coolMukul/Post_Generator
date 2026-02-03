@@ -1,9 +1,9 @@
 import { Job } from 'bullmq';
-import { pdfProcessingQueue } from '../config/queue.js';
+import { mainProcessingQueue } from '../config/queue.js';
 import { JobStatus, JobStatusResponse } from '../types/schemas.js';
 
 export const getJobStatus = async (jobId: string): Promise<JobStatusResponse> => {
-  const job = await pdfProcessingQueue.getJob(jobId);
+  const job = await mainProcessingQueue.getJob(jobId);
 
   if (!job) {
     throw new Error('Job not found');
@@ -45,24 +45,24 @@ export const listJobs = async (status?: JobStatus, limit = 50): Promise<JobStatu
 
   switch (status) {
     case JobStatus.SUCCESS:
-      jobs = await pdfProcessingQueue.getCompleted(0, limit - 1);
+      jobs = await mainProcessingQueue.getCompleted(0, limit - 1);
       break;
     case JobStatus.FAILED:
-      jobs = await pdfProcessingQueue.getFailed(0, limit - 1);
+      jobs = await mainProcessingQueue.getFailed(0, limit - 1);
       break;
     case JobStatus.IN_PROGRESS:
-      jobs = await pdfProcessingQueue.getActive(0, limit - 1);
+      jobs = await mainProcessingQueue.getActive(0, limit - 1);
       break;
     case JobStatus.PENDING:
-      jobs = await pdfProcessingQueue.getWaiting(0, limit - 1);
+      jobs = await mainProcessingQueue.getWaiting(0, limit - 1);
       break;
     default:
       // Get all jobs
       const [completed, failed, active, waiting] = await Promise.all([
-        pdfProcessingQueue.getCompleted(0, Math.floor(limit / 4)),
-        pdfProcessingQueue.getFailed(0, Math.floor(limit / 4)),
-        pdfProcessingQueue.getActive(0, Math.floor(limit / 4)),
-        pdfProcessingQueue.getWaiting(0, Math.floor(limit / 4)),
+        mainProcessingQueue.getCompleted(0, Math.floor(limit / 4)),
+        mainProcessingQueue.getFailed(0, Math.floor(limit / 4)),
+        mainProcessingQueue.getActive(0, Math.floor(limit / 4)),
+        mainProcessingQueue.getWaiting(0, Math.floor(limit / 4)),
       ]);
       jobs = [...completed, ...failed, ...active, ...waiting];
   }

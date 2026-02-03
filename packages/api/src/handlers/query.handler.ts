@@ -2,7 +2,7 @@ import { pool } from '../config/database.js';
 import { QueryRequest, QueryResponse, QueryResult } from '../types/schemas.js';
 
 export const searchVectors = async (queryData: QueryRequest): Promise<QueryResponse> => {
-  const { query, limit = 10, document_id } = queryData;
+  const { query, limit = 10, document_id, project_key } = queryData;
 
   // TODO: This is a placeholder. In Phase 2, we'll implement:
   // 1. Generate embedding for the query using OpenAI
@@ -45,14 +45,14 @@ export const searchVectors = async (queryData: QueryRequest): Promise<QueryRespo
 
     return {
       results,
-      query,
-      total: results.length,
+      query,      project_key: project_key || 'researchpaper',      total: results.length,
     };
   } catch (error) {
     console.error('[Query Handler] Error:', error);
     return {
       results: [],
       query,
+      project_key: project_key || 'researchpaper',
       total: 0,
     };
   }

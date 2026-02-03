@@ -9,7 +9,7 @@ import { healthRoutes } from './routes/health.routes.js';
 import { jobRoutes } from './routes/job.routes.js';
 import { pdfRoutes } from './routes/pdf.routes.js';
 import { queryRoutes } from './routes/query.routes.js';
-import { hybridSearchRoutes } from './routes/hybrid-search.routes.js';
+import { hybridRetrievalRoutes } from './routes/hybrid-search.routes.js';
 
 // Create Fastify instance
 const fastify = Fastify({
@@ -53,7 +53,7 @@ async function registerPlugins() {
         { name: 'Jobs', description: 'Job management endpoints' },
         { name: 'PDF', description: 'PDF processing endpoints' },
         { name: 'Query', description: 'Vector search endpoints' },
-        { name: 'Hybrid Search', description: 'Hybrid retrieval combining vector and keyword search' }
+        { name: 'Hybrid Retrieval', description: 'Hybrid retrieval combining vector and keyword search' }
       ]
     }
   });
@@ -75,7 +75,7 @@ async function registerRoutes() {
   await fastify.register(jobRoutes);
   await fastify.register(pdfRoutes);
   await fastify.register(queryRoutes);
-  await fastify.register(hybridSearchRoutes);
+  await fastify.register(hybridRetrievalRoutes);
 }
 
 // Startup checks
@@ -113,7 +113,7 @@ async function gracefulShutdown() {
     fastify.log.info('Shutdown complete');
     process.exit(0);
   } catch (error) {
-    fastify.log.error('Error during shutdown:', error);
+    fastify.log.error({ error }, 'Error during shutdown:');
     process.exit(1);
   }
 }
@@ -142,7 +142,7 @@ async function start() {
     process.on('SIGINT', gracefulShutdown);
 
   } catch (error) {
-    fastify.log.error('Failed to start server:', error);
+    fastify.log.error({ error }, 'Failed to start server:');
     process.exit(1);
   }
 }
