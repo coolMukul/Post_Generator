@@ -574,14 +574,22 @@ class HybridRetrievalRepository:
                         logger.info(f"📄 [KEYWORD SEARCH] Row {idx+1}: id={row['id']}, title={row.get('document_title', 'N/A')[:50]}, score={row.get('score', 0)}")
                 
                 # Normalize scores and filter by min_score
-                max_score = max((row['score'] for row in rows), default=1.0)
+                # Coerce DB numeric types (which may be Decimal) to float to avoid
+                # unsupported operand type errors when dividing.
+                max_score = float(max((row['score'] for row in rows), default=1.0))
                 logger.info(f"📊 [KEYWORD SEARCH] Max score: {max_score}")
-                
+
                 results = []
                 for row in rows:
-                    normalized_score = float(row['score']) / max_score if max_score > 0 else 0
-                    
-                    logger.debug(f"🔢 [KEYWORD SEARCH] Doc {row['id']}: raw_score={row['score']}, normalized={normalized_score}, min_score={min_score}")
+                    raw_score = row.get('score') or 0.0
+                    try:
+                        score_float = float(raw_score)
+                    except Exception:
+                        score_float = float(str(raw_score))
+
+                    normalized_score = score_float / max_score if max_score > 0 else 0.0
+
+                    logger.debug(f"🔢 [KEYWORD SEARCH] Doc {row['id']}: raw_score={raw_score}, normalized={normalized_score}, min_score={min_score}")
                     
                     if normalized_score >= min_score:
                         # Parse metadata if it's a string

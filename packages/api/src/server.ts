@@ -9,7 +9,7 @@ import { healthRoutes } from './routes/health.routes.js';
 import { jobRoutes } from './routes/job.routes.js';
 import { pdfRoutes } from './routes/pdf.routes.js';
 import { queryRoutes } from './routes/query.routes.js';
-import { hybridRetrievalRoutes } from './routes/hybrid-search.routes.js';
+import { hybridRetrievalRoutes } from './routes/hybrid-retrieval.routes.js';
 
 // Create Fastify instance
 const fastify = Fastify({

@@ -1,4 +1,4 @@
-# Hybrid Search Implementation Guide
+# Hybrid Retrieval Implementation Guide
 
 ## Overview
 
@@ -19,11 +19,11 @@ This approach delivers better search results than using either method alone.
 │   Port 3201 │
 └──────┬──────┘
        │
-       │ POST /hybrid-search
+      │ POST /hybrid-retrieval
        │
        v
 ┌─────────────────────────────────────────┐
-│   HybridSearchRepository (Python)       │
+│   HybridRetrievalRepository (Python)       │
 │                                          │
 │   ┌─────────────┐   ┌────────────────┐ │
 │   │   Vector    │   │    Keyword     │ │
@@ -65,15 +65,15 @@ This approach delivers better search results than using either method alone.
 
 ## Python Implementation
 
-### HybridSearchRepository
+### HybridRetrievalRepository
 
-Location: `packages/workers/src/repositories/hybrid_search_repository.py`
+Location: `packages/workers/src/repositories/hybrid_retrieval_repository.py`
 
 ```python
-from repositories import HybridSearchRepository, HybridSearchConfig
+from repositories import HybridRetrievalRepository, HybridRetrievalConfig
 
 # Initialize
-config = HybridSearchConfig(
+config = HybridRetrievalConfig(
     default_limit=20,
     default_min_score=0.3,
     default_vector_weight=0.7,
@@ -81,7 +81,7 @@ config = HybridSearchConfig(
     rrf_k=60
 )
 
-repo = HybridSearchRepository(
+repo = HybridRetrievalRepository(
     connection_string=DATABASE_URL,
     config=config
 )
@@ -158,7 +158,7 @@ Results include `rank_source` to understand how they were found:
 ### Request
 
 ```http
-POST http://localhost:3201/hybrid-search
+POST http://localhost:3201/hybrid-retrieval
 Content-Type: application/json
 
 {
@@ -212,7 +212,7 @@ $body = @{
     keyword_weight = 0.3
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:3201/hybrid-search" `
+Invoke-RestMethod -Uri "http://localhost:3201/hybrid-retrieval" `
     -Method Post `
     -ContentType "application/json" `
     -Body $body
@@ -221,7 +221,7 @@ Invoke-RestMethod -Uri "http://localhost:3201/hybrid-search" `
 ### cURL Example
 
 ```bash
-curl -X POST http://localhost:3201/hybrid-search \
+curl -X POST http://localhost:3201/hybrid-retrieval \
   -H "Content-Type: application/json" \
   -d '{
     "query": "reinforcement learning robotics",
@@ -303,15 +303,15 @@ CREATE INDEX idx_document_vectors_embedding ON document_vectors
 
 ```python
 import pytest
-from repositories import HybridSearchRepository
+from repositories import HybridRetrievalRepository
 
 @pytest.fixture
 def repo():
-    return HybridSearchRepository(
+    return HybridRetrievalRepository(
         connection_string=TEST_DB_URL
     )
 
-def test_hybrid_search(repo):
+def test_hybrid_retrieval(repo):
     # Mock embedding
     embedding = [0.1] * 1536
 
@@ -338,7 +338,7 @@ Invoke-RestMethod -Uri "http://localhost:3201/pdf/process" `
 # Check job status...
 
 # 3. Test hybrid search
-Invoke-RestMethod -Uri "http://localhost:3201/hybrid-search" `
+Invoke-RestMethod -Uri "http://localhost:3201/hybrid-retrieval" `
     -Method Post -ContentType "application/json" `
     -Body '{"query":"neural networks","limit":5}'
 

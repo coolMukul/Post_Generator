@@ -139,8 +139,8 @@ export const QueryResponseSchema = z.object({
   total: z.number()
 });
 
-// Hybrid Search Schemas
-export const HybridSearchRequestSchema = z.object({
+// Hybrid Retrieval Schemas
+export const HybridRetrievalRequestSchema = z.object({
   query: z.string().min(1).describe('Search query'),
   project_key: z.string().optional().default('researchpaper').describe('Project key to search within'),
   limit: z.number().min(1).max(100).default(20).optional().describe('Number of results'),
@@ -150,7 +150,7 @@ export const HybridSearchRequestSchema = z.object({
   rrf_k: z.number().min(1).default(60).optional().describe('RRF constant (higher = more conservative)')
 });
 
-export const HybridSearchResultSchema = z.object({
+export const HybridRetrievalResultSchema = z.object({
   id: z.string().uuid(),
   document_id: z.string().uuid(),
   chunk_index: z.number(),
@@ -162,8 +162,8 @@ export const HybridSearchResultSchema = z.object({
   document_title: z.string().optional()
 });
 
-export const HybridSearchResponseSchema = z.object({
-  results: z.array(HybridSearchResultSchema),
+export const HybridRetrievalResponseSchema = z.object({
+  results: z.array(HybridRetrievalResultSchema),
   query: z.string(),
   project_key: z.string(),
   total: z.number(),
@@ -197,7 +197,7 @@ export type ProcessPdfRequest = z.infer<typeof ProcessPdfRequestSchema>;
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;
 export type QueryResult = z.infer<typeof QueryResultSchema>;
 export type QueryResponse = z.infer<typeof QueryResponseSchema>;
-export type HybridSearchRequest = z.infer<typeof HybridSearchRequestSchema>;
-export type HybridSearchResult = z.infer<typeof HybridSearchResultSchema>;
-export type HybridSearchResponse = z.infer<typeof HybridSearchResponseSchema>;
+export type HybridRetrievalRequest = z.infer<typeof HybridRetrievalRequestSchema>;
+export type HybridRetrievalResult = z.infer<typeof HybridRetrievalResultSchema>;
+export type HybridRetrievalResponse = z.infer<typeof HybridRetrievalResponseSchema>;
 export type HealthCheck = z.infer<typeof HealthCheckSchema>;

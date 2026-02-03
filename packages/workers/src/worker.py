@@ -52,9 +52,9 @@ class BullMQWorker:
             logger.info("="*60)
 
             # Route to appropriate job handler based on job name
-            if job_name == 'hybrid-retrieval' or 'query' in data:
+            if job_name == 'hybrid-retrieval' or (isinstance(data, dict) and 'query' in data):
                 # Hybrid retrieval job
-                logger.info(f"🔍 Routing to hybrid retrieval handler...")
+                logger.info("🔍 Routing to hybrid retrieval handler...")
                 result = await process_hybrid_retrieval_job(job_id, data)
             else:
                 # Default to PDF processing

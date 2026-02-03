@@ -284,6 +284,7 @@ cd packages/workers
 python3 -m venv venv
 source venv/bin/activate
 
+
 # Install dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -345,7 +346,7 @@ pnpm dev
 **Terminal 2 - Worker:**
 ```bash
 cd packages/workers
-source venv/bin/activate
+source venv/bin/activate  --- OR ---    .\venv\Scripts\Activate.ps1
 python -m src.worker
 ```
 

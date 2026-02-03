@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-interface HybridSearchResult {
+interface HybridRetrievalResult {
   id: string;
   document_id: string;
   document_title?: string;
@@ -15,8 +15,8 @@ interface HybridSearchResult {
   metadata: Record<string, any>;
 }
 
-interface HybridSearchResponse {
-  results: HybridSearchResult[];
+interface HybridRetrievalResponse {
+  results: HybridRetrievalResult[];
   query: string;
   project_key: string;
   total: number;
@@ -27,7 +27,7 @@ interface HybridSearchResponse {
   };
 }
 
-export default function HybridSearchPage() {
+export default function HybridRetrievalPage() {
   // Get API base URL from environment variable
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3201';
 
@@ -40,7 +40,7 @@ export default function HybridSearchPage() {
   const [rrfK, setRrfK] = useState(60);
 
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<HybridSearchResponse | null>(null);
+  const [response, setResponse] = useState<HybridRetrievalResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -56,7 +56,7 @@ export default function HybridSearchPage() {
     setResponse(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/hybrid-search`, {
+      const res = await fetch(`${API_BASE_URL}/hybrid-retrieval`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -75,7 +75,7 @@ export default function HybridSearchPage() {
         throw new Error(errorData.error || `HTTP ${res.status}`);
       }
 
-      const data: HybridSearchResponse = await res.json();
+      const data: HybridRetrievalResponse = await res.json();
       setResponse(data);
     } catch (err: any) {
       setError(err.message || 'Failed to perform search');
@@ -385,7 +385,7 @@ export default function HybridSearchPage() {
       <div className="alert alert-info" style={{ marginTop: '2rem' }}>
         <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>🔌 API Endpoint</h3>
         <div style={{ fontSize: '0.875rem' }}>
-          <p><strong>Hybrid Search:</strong> <code>POST {API_BASE_URL}/hybrid-search</code></p>
+          <p><strong>Hybrid Retrieval:</strong> <code>POST {API_BASE_URL}/hybrid-retrieval</code></p>
           <p style={{ marginTop: '0.5rem', color: '#666' }}>
             Combines vector similarity and keyword matching with RRF
           </p>
