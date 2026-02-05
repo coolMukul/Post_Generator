@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import time
+import json
 import urllib.request
 import ssl
 import xml.etree.ElementTree as ET
@@ -181,12 +182,15 @@ def update_document(conn, doc_id: str, title: str, metadata: Dict[str, Any]) -> 
         True if successful, False otherwise
     """
     try:
+        # Serialize metadata to JSON string
+        metadata_json = json.dumps(metadata)
+
         with conn.cursor() as cur:
             cur.execute("""
                 UPDATE documents
-                SET title = %s, metadata = %s
+                SET title = %s, metadata = %s::jsonb
                 WHERE id = %s
-            """, (title, metadata, doc_id))
+            """, (title, metadata_json, doc_id))
 
         conn.commit()
         return True
