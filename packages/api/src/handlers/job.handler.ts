@@ -44,20 +44,48 @@ async function getJobFromRedis(jobId: string): Promise<RedisJobData | null> {
     const jobHash = await redisClient.hgetall(jobKey);
     if (!jobHash || Object.keys(jobHash).length === 0) continue;
 
-    // Determine state by checking which list contains the job
+    // Determine state by checking job hash fields first (more reliable)
+    // BullMQ uses sorted sets for completed/failed, lists for wait/active
     let state: RedisJobData['state'] = 'waiting';
 
-    const inWait = await redisClient.lpos(`bull:${queueName}:wait`, jobId);
-    const inActive = await redisClient.lpos(`bull:${queueName}:active`, jobId);
-    const inCompleted = await redisClient.lpos(`bull:${queueName}:completed`, jobId);
-    const inFailed = await redisClient.lpos(`bull:${queueName}:failed`, jobId);
-
-    if (inCompleted !== null) state = 'completed';
-    else if (inFailed !== null) state = 'failed';
-    else if (inActive !== null) state = 'active';
-    else if (inWait !== null) state = 'waiting';
-    else if (jobHash.finishedOn && jobHash.returnvalue) state = 'completed';
-    else if (jobHash.finishedOn && jobHash.failedReason) state = 'failed';
+    // First, check hash fields - most reliable for completed jobs
+    if (jobHash.finishedOn && jobHash.returnvalue) {
+      state = 'completed';
+    } else if (jobHash.finishedOn && jobHash.failedReason) {
+      state = 'failed';
+    } else {
+      // Check lists for wait/active states (these are actual lists)
+      try {
+        const inActive = await redisClient.lpos(`bull:${queueName}:active`, jobId);
+        if (inActive !== null) {
+          state = 'active';
+        } else {
+          const inWait = await redisClient.lpos(`bull:${queueName}:wait`, jobId);
+          if (inWait !== null) {
+            state = 'waiting';
+          }
+        }
+      } catch {
+        // If lpos fails (WRONGTYPE), fall back to checking sorted sets
+        try {
+          // BullMQ uses sorted sets for completed/failed
+          const completedScore = await redisClient.zscore(`bull:${queueName}:completed`, jobId);
+          if (completedScore !== null) {
+            state = 'completed';
+          } else {
+            const failedScore = await redisClient.zscore(`bull:${queueName}:failed`, jobId);
+            if (failedScore !== null) {
+              state = 'failed';
+            }
+          }
+        } catch {
+          // If all else fails, use hash fields or default to waiting
+          if (jobHash.processedOn && !jobHash.finishedOn) {
+            state = 'active';
+          }
+        }
+      }
+    }
 
     // Parse job data
     let data: Record<string, unknown> | null = null;
