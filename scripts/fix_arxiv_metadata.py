@@ -144,14 +144,14 @@ def find_documents_needing_fix(conn) -> List[Dict[str, Any]]:
     Find documents that need metadata fixing.
 
     Criteria:
-    - URL contains arxiv.org
+    - source_url contains arxiv.org
     - AND (title is NULL OR title is URL OR title is just paper ID OR metadata is empty)
     """
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute("""
-            SELECT id, url, title, source_url, metadata, created_at
+            SELECT id, source_url, title, metadata, created_at
             FROM documents
-            WHERE (url LIKE '%arxiv.org%' OR source_url LIKE '%arxiv.org%')
+            WHERE source_url LIKE '%arxiv.org%'
               AND (
                   title IS NULL
                   OR title LIKE 'http%'
@@ -222,7 +222,7 @@ def main():
     print("-" * 70)
     for i, doc in enumerate(documents[:5], 1):
         print(f"{i}. ID: {doc['id']}")
-        print(f"   URL: {doc['url'] or doc['source_url']}")
+        print(f"   URL: {doc['source_url']}")
         print(f"   Current Title: {doc['title'] or '(None)'}")
         print(f"   Metadata: {'Empty {}' if not doc['metadata'] or doc['metadata'] == {} else 'Has data'}")
         print()
@@ -250,11 +250,11 @@ def main():
         print(f"\n[{i}/{len(documents)}] Processing document {doc['id'][:8]}...")
 
         # Extract arXiv ID
-        url = doc['url'] or doc['source_url'] or ''
+        source_url = doc['source_url'] or ''
         title = doc['title'] or ''
 
         # Try to get arXiv ID from URL or title
-        arxiv_id = extract_arxiv_id(url) or extract_arxiv_id(title)
+        arxiv_id = extract_arxiv_id(source_url) or extract_arxiv_id(title)
 
         if not arxiv_id:
             print(f"   ⚠️  Could not extract arXiv ID from URL or title")
