@@ -123,8 +123,9 @@ class BullMQWorker:
                         except Exception:
                             parsed = job_data_str if isinstance(job_data_str, dict) else job_data_str
 
-                        # If parsed is the raw payload (contains 'url'), wrap into job object
-                        if isinstance(parsed, dict) and parsed.get('url'):
+                        # If parsed is the raw payload, wrap into job object format
+                        # PDF jobs have 'url', Agent jobs have 'agentType'
+                        if isinstance(parsed, dict) and (parsed.get('url') or parsed.get('agentType')):
                             job_obj = {'id': job_id, 'data': parsed}
                         else:
                             job_obj = parsed
