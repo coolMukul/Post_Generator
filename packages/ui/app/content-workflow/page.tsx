@@ -132,7 +132,7 @@ export default function ContentWorkflowPage() {
   };
 
   const startPolling = (historyId: string, jobId: string) => {
-    const intervalSec = 5; // Poll every 5 seconds for faster feedback
+    const intervalSec = 60; // Poll every 60 seconds
     countdowns.current[historyId] = intervalSec;
     setHistory((s) => s.map((h) => (h.id === historyId ? { ...h, countdown: intervalSec } : h)));
 
@@ -234,7 +234,7 @@ export default function ContentWorkflowPage() {
         return;
       }
       countdowns.current[historyId] = 5;
-      setHistory((s) => s.map((h) => (h.id === historyId ? { ...h, countdown: 5 } : h)));
+      setHistory((s) => s.map((h) => (h.id === historyId ? { ...h, countdown: 60 } : h)));
       if (!pollingRefs.current[historyId]) startPolling(historyId, jobId);
     } catch (err: any) {
       setHistory((s) => s.map((h) => (h.id === historyId ? { ...h, loading: false, error: err.message, countdown: 0 } : h)));
@@ -255,7 +255,7 @@ export default function ContentWorkflowPage() {
     }
     delete countdowns.current[historyId];
 
-    setHistory((s) => s.map((h) => (h.id === historyId ? { ...h, loading: true, result: null, error: null, countdown: 5 } : h)));
+    setHistory((s) => s.map((h) => (h.id === historyId ? { ...h, loading: true, result: null, error: null, countdown: 60 } : h)));
 
     try {
       const res = await fetch(`${API_URL}/agent/content-workflow`, {

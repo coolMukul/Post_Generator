@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import json
+import time
 from redis import asyncio as aioredis
 from .config import settings, get_redis_url
 from .jobs import process_pdf_job
@@ -80,11 +81,15 @@ class BullMQWorker:
                 # BullMQ stores jobs in Redis lists with specific keys
                 # Format: bull:{queue_name}:wait
                 wait_key = f"bull:{self.queue_name}:wait"
+                active_key = f"bull:{self.queue_name}:active"
 
                 # Try to get a job (non-blocking check)
                 job_id = await self.redis.lpop(wait_key)
 
                 if job_id:
+                    # Move job to active state
+                    await self.redis.lpush(active_key, job_id)
+
                     # Get job data
                     job_key = f"bull:{self.queue_name}:{job_id}"
                     try:
@@ -135,14 +140,21 @@ class BullMQWorker:
                             # Agent jobs need agentType and input
                             if not job_obj or not (isinstance(job_obj, dict) and job_obj.get('data') and job_obj['data'].get('agentType')):
                                 logger.error('Agent job payload missing `agentType`. job_key=%s job_data_preview=%s', job_key, str(parsed)[:200])
+                                # Remove from active since we're not processing
+                                await self.redis.lrem(active_key, 1, job_id)
                             else:
-                                result = await self.process_job(job_obj)
-                                # Store result in Redis for the API to retrieve
-                                await self.store_job_result(job_id, result)
+                                try:
+                                    result = await self.process_job(job_obj)
+                                    # Store result in Redis for the API to retrieve
+                                    await self.store_job_result(job_id, result)
+                                except Exception as e:
+                                    # Mark job as failed
+                                    await self.store_job_failure(job_id, str(e))
                         else:
                             # PDF jobs need url
                             if not job_obj or not (isinstance(job_obj, dict) and job_obj.get('data') and job_obj['data'].get('url')):
                                 logger.error('Job payload missing `url`. job_key=%s job_data_preview=%s', job_key, str(parsed)[:200])
+                                await self.redis.lrem(active_key, 1, job_id)
                             else:
                                 await self.process_job(job_obj)
                 else:
@@ -157,13 +169,14 @@ class BullMQWorker:
         """Store job result in Redis for BullMQ to retrieve."""
         try:
             job_key = f"bull:{self.queue_name}:{job_id}"
+            now_ms = str(int(time.time() * 1000))
 
             # BullMQ expects returnvalue to be stored
             # Update the job hash with the result
             await self.redis.hset(job_key, mapping={
                 'returnvalue': json.dumps(result),
-                'finishedOn': str(int(asyncio.get_event_loop().time() * 1000)),
-                'processedOn': str(int(asyncio.get_event_loop().time() * 1000)),
+                'finishedOn': now_ms,
+                'processedOn': now_ms,
             })
 
             # Move job from active to completed
@@ -177,6 +190,30 @@ class BullMQWorker:
             logger.info(f"[{self.job_type}] Job {job_id} result stored and marked as completed")
         except Exception as e:
             logger.error(f"[{self.job_type}] Failed to store job result: {str(e)}", exc_info=True)
+
+    async def store_job_failure(self, job_id: str, error_message: str):
+        """Store job failure in Redis for BullMQ to retrieve."""
+        try:
+            job_key = f"bull:{self.queue_name}:{job_id}"
+            now_ms = str(int(time.time() * 1000))
+
+            # Update the job hash with failure info
+            await self.redis.hset(job_key, mapping={
+                'failedReason': error_message,
+                'finishedOn': now_ms,
+                'processedOn': now_ms,
+            })
+
+            # Move job from active to failed
+            active_key = f"bull:{self.queue_name}:active"
+            failed_key = f"bull:{self.queue_name}:failed"
+
+            await self.redis.lrem(active_key, 1, job_id)
+            await self.redis.lpush(failed_key, job_id)
+
+            logger.info(f"[{self.job_type}] Job {job_id} marked as failed: {error_message}")
+        except Exception as e:
+            logger.error(f"[{self.job_type}] Failed to store job failure: {str(e)}", exc_info=True)
 
     async def start(self):
         """Start the worker."""
