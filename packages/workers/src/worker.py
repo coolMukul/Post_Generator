@@ -5,6 +5,7 @@ import json
 from redis import asyncio as aioredis
 from .config import settings, get_redis_url
 from .jobs import process_pdf_job
+from .jobs.agent_processor import process_agent_job
 
 # Configure logging
 logging.basicConfig(
@@ -17,12 +18,13 @@ logger = logging.getLogger(__name__)
 class BullMQWorker:
     """Simple BullMQ worker that consumes jobs from Redis."""
 
-    def __init__(self, queue_name: str, redis_url: str, concurrency: int = 1):
+    def __init__(self, queue_name: str, redis_url: str, concurrency: int = 1, job_type: str = 'pdf'):
         self.queue_name = queue_name
         self.redis_url = redis_url
         self.concurrency = concurrency
         self.redis = None
         self.running = False
+        self.job_type = job_type  # 'pdf' or 'agent'
 
     async def connect(self):
         """Connect to Redis."""
@@ -44,17 +46,21 @@ class BullMQWorker:
             job_id = job_data.get('id', 'unknown')
             data = job_data.get('data', {})
 
-            logger.info(f"Processing job: {job_id}")
-            logger.info(f"Job data: {data}")
+            logger.info(f"[{self.job_type}] Processing job: {job_id}")
+            logger.info(f"[{self.job_type}] Job data: {data}")
 
-            # Process the PDF job
-            result = await process_pdf_job(job_id, data)
+            if self.job_type == 'agent':
+                # Process agent job
+                result = await process_agent_job(job_id, data)
+            else:
+                # Process the PDF job
+                result = await process_pdf_job(job_id, data)
 
-            logger.info(f"Job {job_id} completed successfully")
+            logger.info(f"[{self.job_type}] Job {job_id} completed successfully")
             return result
 
         except Exception as e:
-            logger.error(f"Job processing failed: {str(e)}", exc_info=True)
+            logger.error(f"[{self.job_type}] Job processing failed: {str(e)}", exc_info=True)
             raise
 
     async def poll_jobs(self):
@@ -124,10 +130,20 @@ class BullMQWorker:
                             job_obj = parsed
 
                         # Validate required field before processing
-                        if not job_obj or not (isinstance(job_obj, dict) and job_obj.get('data') and job_obj['data'].get('url')):
-                            logger.error('Job payload missing `url`. job_key=%s job_data_preview=%s', job_key, str(parsed)[:200])
+                        if self.job_type == 'agent':
+                            # Agent jobs need agentType and input
+                            if not job_obj or not (isinstance(job_obj, dict) and job_obj.get('data') and job_obj['data'].get('agentType')):
+                                logger.error('Agent job payload missing `agentType`. job_key=%s job_data_preview=%s', job_key, str(parsed)[:200])
+                            else:
+                                result = await self.process_job(job_obj)
+                                # Store result in Redis for the API to retrieve
+                                await self.store_job_result(job_id, result)
                         else:
-                            await self.process_job(job_obj)
+                            # PDF jobs need url
+                            if not job_obj or not (isinstance(job_obj, dict) and job_obj.get('data') and job_obj['data'].get('url')):
+                                logger.error('Job payload missing `url`. job_key=%s job_data_preview=%s', job_key, str(parsed)[:200])
+                            else:
+                                await self.process_job(job_obj)
                 else:
                     # No jobs available, wait a bit
                     await asyncio.sleep(1)
@@ -135,6 +151,31 @@ class BullMQWorker:
             except Exception as e:
                 logger.error(f"Error polling jobs: {str(e)}", exc_info=True)
                 await asyncio.sleep(5)  # Wait before retrying
+
+    async def store_job_result(self, job_id: str, result: dict):
+        """Store job result in Redis for BullMQ to retrieve."""
+        try:
+            job_key = f"bull:{self.queue_name}:{job_id}"
+
+            # BullMQ expects returnvalue to be stored
+            # Update the job hash with the result
+            await self.redis.hset(job_key, mapping={
+                'returnvalue': json.dumps(result),
+                'finishedOn': str(int(asyncio.get_event_loop().time() * 1000)),
+                'processedOn': str(int(asyncio.get_event_loop().time() * 1000)),
+            })
+
+            # Move job from active to completed
+            active_key = f"bull:{self.queue_name}:active"
+            completed_key = f"bull:{self.queue_name}:completed"
+
+            # Remove from active and add to completed
+            await self.redis.lrem(active_key, 1, job_id)
+            await self.redis.lpush(completed_key, job_id)
+
+            logger.info(f"[{self.job_type}] Job {job_id} result stored and marked as completed")
+        except Exception as e:
+            logger.error(f"[{self.job_type}] Failed to store job result: {str(e)}", exc_info=True)
 
     async def start(self):
         """Start the worker."""
@@ -162,28 +203,42 @@ class BullMQWorker:
 async def main():
     """Main worker loop."""
     logger.info("="*60)
-    logger.info("Starting PDF Processing Worker")
+    logger.info("Starting Workers (PDF + Agent)")
     logger.info("="*60)
     logger.info(f"Redis URL: {get_redis_url()}")
-    logger.info(f"Queue: pdf-processing")
+    logger.info(f"Queues: pdf-processing, agent-tasks")
     logger.info(f"Concurrency: {settings.worker_concurrency}")
     logger.info("="*60)
 
-    # Create and start worker
-    worker = BullMQWorker(
+    # Create workers for both queues
+    pdf_worker = BullMQWorker(
         queue_name="pdf-processing",
         redis_url=get_redis_url(),
-        concurrency=settings.worker_concurrency
+        concurrency=settings.worker_concurrency,
+        job_type='pdf'
+    )
+
+    agent_worker = BullMQWorker(
+        queue_name="agent-tasks",
+        redis_url=get_redis_url(),
+        concurrency=settings.worker_concurrency,
+        job_type='agent'
     )
 
     try:
-        await worker.start()
+        # Run both workers concurrently
+        await asyncio.gather(
+            pdf_worker.start(),
+            agent_worker.start()
+        )
     except KeyboardInterrupt:
         logger.info("\nReceived shutdown signal")
-        await worker.stop()
+        await pdf_worker.stop()
+        await agent_worker.stop()
     except Exception as e:
         logger.error(f"Worker error: {str(e)}", exc_info=True)
-        await worker.stop()
+        await pdf_worker.stop()
+        await agent_worker.stop()
         raise
 
 
