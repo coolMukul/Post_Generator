@@ -247,7 +247,8 @@ def main():
     skipped_count = 0
 
     for i, doc in enumerate(documents, 1):
-        print(f"\n[{i}/{len(documents)}] Processing document {doc['id'][:8]}...")
+        doc_id_str = str(doc['id'])
+        print(f"\n[{i}/{len(documents)}] Processing document {doc_id_str[:8]}...")
 
         # Extract arXiv ID
         source_url = doc['source_url'] or ''
@@ -271,7 +272,7 @@ def main():
 
         # Update database
         new_title = metadata['title']
-        success = update_document(conn, doc['id'], new_title, metadata)
+        success = update_document(conn, doc_id_str, new_title, metadata)
 
         if success:
             print(f"   ✅ Updated: {new_title[:60]}...")
