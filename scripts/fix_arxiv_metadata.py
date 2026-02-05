@@ -17,11 +17,18 @@ import re
 import sys
 import time
 import urllib.request
+import ssl
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
+
+# Create SSL context that doesn't verify certificates
+# This is needed on Windows where Python may not have proper CA certificates
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 
 # Load environment variables
 load_dotenv()
@@ -47,7 +54,7 @@ def fetch_arxiv_metadata(paper_id: str) -> Optional[Dict[str, Any]]:
 
     try:
         print(f"   📡 Fetching metadata for arXiv:{paper_id}")
-        with urllib.request.urlopen(api_url, timeout=10) as response:
+        with urllib.request.urlopen(api_url, timeout=10, context=ssl_context) as response:
             xml_data = response.read()
 
         root = ET.fromstring(xml_data)
