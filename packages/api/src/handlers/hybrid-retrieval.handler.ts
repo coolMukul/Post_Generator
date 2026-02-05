@@ -1,13 +1,11 @@
 import { HybridRetrievalRequest, HybridRetrievalResponse } from '../types/schemas.js';
 import { mainProcessingQueue, mainProcessingEvents, redisClient, QUEUE_NAMES } from '../config/queue.js';
-import { generateQueryEmbedding } from '../services/embedding.service.js';
 
 /**
  * Hybrid Retrieval Handler
  *
- * Generates query embeddings and submits hybrid retrieval requests to the worker queue.
- * The worker handles the actual retrieval using Python repositories with proper
- * vector embeddings and keyword search capabilities.
+ * Submits hybrid retrieval requests to the worker queue for processing.
+ * The worker handles embedding generation and actual retrieval using Python repositories.
  */
 export async function performHybridSearch(
   params: HybridRetrievalRequest
@@ -31,19 +29,11 @@ export async function performHybridSearch(
   }
 
   try {
-    // Generate query embedding using OpenAI
-    console.log(`[Hybrid Retrieval] Generating embedding for query: "${query}"`);
-    const query_embedding = await generateQueryEmbedding(query);
-    console.log(`[Hybrid Retrieval] Embedding generated (${query_embedding.length} dimensions)`);
-
-    // Prepare job data with embedding
-    const jobData = {
-      ...params,
-      query_embedding, // Add the embedding to the job data
-    };
+    // Submit job to worker - worker will generate embeddings and perform retrieval
+    console.log(`[Hybrid Retrieval] Submitting query: "${query}"`);
 
     // Add job to the main processing queue with 'hybrid-retrieval' job name
-    const job = await mainProcessingQueue.add('hybrid-retrieval', jobData, {
+    const job = await mainProcessingQueue.add('hybrid-retrieval', params, {
       jobId: `retrieval-${Date.now()}-${Math.random().toString(36).substring(7)}`,
     });
 

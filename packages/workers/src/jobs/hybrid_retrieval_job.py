@@ -1,10 +1,19 @@
 """Hybrid retrieval job handler."""
 import logging
+import os
 from typing import Dict, Any, List
+from openai import OpenAI
 from ..config import settings, get_database_url
 from ..repositories.hybrid_retrieval_repository import HybridRetrievalRepository
 
 logger = logging.getLogger(__name__)
+
+# Initialize OpenAI client
+openai_client = None
+if os.getenv('OPENAI_API_KEY'):
+    openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+else:
+    logger.warning("⚠️  OPENAI_API_KEY not set - vector search will not be available")
 
 
 async def process_hybrid_retrieval_job(job_id: str, job_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -50,8 +59,22 @@ async def process_hybrid_retrieval_job(job_id: str, job_data: Dict[str, Any]) ->
     logger.info(f"[Job {job_id}] ✅ Repository initialized")
     
     try:
-        # If an embedding is provided, attempt full hybrid retrieval (vector + keyword)
+        # Check if embedding was provided, if not generate it
         query_embedding = job_data.get('query_embedding')
+
+        if not query_embedding and openai_client:
+            logger.info(f"[Job {job_id}] 🔧 No embedding provided - generating using OpenAI...")
+            try:
+                response = openai_client.embeddings.create(
+                    model='text-embedding-3-small',
+                    input=query.strip(),
+                    encoding_format='float'
+                )
+                query_embedding = response.data[0].embedding
+                logger.info(f"[Job {job_id}] ✅ Embedding generated ({len(query_embedding)} dimensions)")
+            except Exception as e:
+                logger.error(f"[Job {job_id}] ❌ Failed to generate embedding: {e}")
+                query_embedding = None
 
         # Debug flags (can be used to disable specific fallback steps)
         debug = bool(job_data.get('debug', False))
