@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { agentTasksQueue } from '../config/queue.js';
 import {
   AgentType,
@@ -20,7 +20,7 @@ export async function submitAgentJob(
   agentType: AgentType,
   input: Record<string, unknown>
 ): Promise<AgentJobResponse> {
-  const jobId = uuidv4();
+  const jobId = randomUUID();
 
   // Validate input based on agent type
   let validatedInput: unknown;
