@@ -11,7 +11,7 @@ export default function HomePage() {
           AI-Powered LinkedIn Content from Academic Research
         </p>
         <p style={{ fontSize: '1rem', opacity: 0.8 }}>
-          Personal Learning Project - Phase 4 Complete
+          Personal Learning Project - Phase 4 & 5 Active
         </p>
       </header>
 
@@ -68,18 +68,18 @@ export default function HomePage() {
           </div>
         </Link>
 
-        <div className="card" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✨</div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-            Content Generation
+        <Link href="/content-workflow" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s', background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', border: '2px solid #7c3aed' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🚀</div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem', color: 'white' }}>
+            Content Workflow
           </h2>
-          <p style={{ color: '#666', marginBottom: '1rem' }}>
-            AI-generated LinkedIn posts from research
+          <p style={{ color: '#a5b4fc', marginBottom: '1rem' }}>
+            Full pipeline: Research → Insights → LinkedIn Post
           </p>
-          <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#6b7280', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
-            Phase 5 Planned
+          <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#7c3aed', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
+            Phase 4+5 Active
           </div>
-        </div>
+        </Link>
       </div>
 
       <div className="card" style={{ marginBottom: '2rem' }}>
@@ -113,6 +113,12 @@ export default function HomePage() {
           </div>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
             ✓ API Endpoints
+          </div>
+          <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
+            ✓ Agent Framework
+          </div>
+          <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
+            ✓ Content Workflow
           </div>
         </div>
       </div>
