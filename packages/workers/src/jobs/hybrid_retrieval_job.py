@@ -52,6 +52,14 @@ async def process_hybrid_retrieval_job(job_id: str, job_data: Dict[str, Any]) ->
     try:
         # If an embedding is provided, attempt full hybrid retrieval (vector + keyword)
         query_embedding = job_data.get('query_embedding')
+
+        # Debug flags (can be used to disable specific fallback steps)
+        debug = bool(job_data.get('debug', False))
+        disable_fulltext = bool(job_data.get('disable_fulltext', False))
+        disable_ilike = bool(job_data.get('disable_ilike', False))
+        disable_token = bool(job_data.get('disable_token', False))
+
+        logger.info(f"[Job {job_id}] 🐞 Debug flags: debug={debug}, disable_fulltext={disable_fulltext}, disable_ilike={disable_ilike}, disable_token={disable_token}")
         if query_embedding:
             logger.info(f"[Job {job_id}] 🔎 query_embedding present - attempting hybrid retrieval (vector + keyword)")
             try:
@@ -63,8 +71,20 @@ async def process_hybrid_retrieval_job(job_id: str, job_data: Dict[str, Any]) ->
                     min_score=min_score,
                     vector_weight=vector_weight,
                     keyword_weight=keyword_weight,
-                    rrf_k=rrf_k
+                    rrf_k=rrf_k,
+                    debug=debug
                 )
+
+                # If debug mode requested, return debug payload directly
+                if debug and isinstance(hybrid_results, dict):
+                    logger.info(f"[Job {job_id}] 🐞 Hybrid retrieval debug mode - returning intermediate data")
+                    return {
+                        'debug': True,
+                        'query': query,
+                        'project_key': project_key,
+                        'payload': hybrid_results
+                    }
+
                 logger.info(f"[Job {job_id}] ✅ Hybrid retrieval returned {len(hybrid_results)} results")
                 results = [
                     {
@@ -91,12 +111,26 @@ async def process_hybrid_retrieval_job(job_id: str, job_data: Dict[str, Any]) ->
                 )
         else:
             logger.info(f"[Job {job_id}] 🔎 No query_embedding provided - running keyword-only search")
+
             results = retrieval_repo.keyword_search_fallback(
                 query=query,
                 project_key=project_key,
                 limit=limit,
-                min_score=min_score
+                min_score=min_score,
+                debug=debug,
+                disable_fulltext=disable_fulltext,
+                disable_ilike=disable_ilike,
+                disable_token=disable_token
             )
+
+            if debug and isinstance(results, dict):
+                logger.info(f"[Job {job_id}] 🐞 Keyword-only debug mode - returning intermediate data")
+                return {
+                    'debug': True,
+                    'query': query,
+                    'project_key': project_key,
+                    'payload': results
+                }
 
         logger.info(f"[Job {job_id}] ✅ Found {len(results)} results")
         

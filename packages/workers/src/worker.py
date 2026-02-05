@@ -2,9 +2,25 @@
 import asyncio
 import logging
 import json
+from uuid import UUID
+from datetime import datetime
+from decimal import Decimal
 from redis import asyncio as aioredis
 from .config import settings, get_redis_url
 from .jobs import process_pdf_job, process_hybrid_retrieval_job
+
+
+class JSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles UUID, datetime, and Decimal types."""
+    def default(self, obj):
+        if isinstance(obj, UUID):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
+
 
 # Configure logging
 logging.basicConfig(
@@ -48,7 +64,7 @@ class BullMQWorker:
             logger.info("="*60)
             logger.info(f"⚡ JOB STARTED: {job_id}")
             logger.info(f"📋 Job Type: {job_name}")
-            logger.info(f"📦 Job Data: {json.dumps(data, indent=2)}")
+            logger.info(f"📦 Job Data: {json.dumps(data, indent=2, cls=JSONEncoder)}")
             logger.info("="*60)
 
             # Route to appropriate job handler based on job name
@@ -63,7 +79,7 @@ class BullMQWorker:
 
             logger.info("="*60)
             logger.info(f"✅ JOB COMPLETED: {job_id}")
-            logger.info(f"📊 Result: {json.dumps(result, indent=2) if isinstance(result, dict) else str(result)[:200]}")
+            logger.info(f"📊 Result: {json.dumps(result, indent=2, cls=JSONEncoder) if isinstance(result, dict) else str(result)[:200]}")
             logger.info("="*60)
             return result
 
@@ -112,11 +128,11 @@ class BullMQWorker:
                         result = await self.process_job(job_payload)
                         
                         # Mark job as completed by storing result
-                        await self.redis.hset(job_key, 'returnvalue', json.dumps(result))
+                        await self.redis.hset(job_key, 'returnvalue', json.dumps(result, cls=JSONEncoder))
                         await self.redis.zadd(f"bull:{self.queue_name}:completed", {job_id: int(asyncio.get_event_loop().time() * 1000)})
                         
                         # Publish completion event for waitUntilFinished
-                        await self.redis.publish(f"bull:{self.queue_name}:completed", json.dumps({'jobId': job_payload['id'], 'returnvalue': result}))
+                        await self.redis.publish(f"bull:{self.queue_name}:completed", json.dumps({'jobId': job_payload['id'], 'returnvalue': result}, cls=JSONEncoder))
                 else:
                     # No jobs available, wait a bit
                     await asyncio.sleep(1)

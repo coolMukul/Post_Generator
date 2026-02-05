@@ -1,5 +1,6 @@
 """Document repository for database operations."""
 import hashlib
+import json
 from datetime import datetime
 from typing import Optional, Dict, Any
 import psycopg
@@ -33,6 +34,18 @@ class DocumentRepository:
         # Generate checksum from URL
         checksum = hashlib.sha256(url.encode()).hexdigest()
 
+        # Ensure title is not null to satisfy DB NOT NULL constraint
+        # Prefer provided title, then metadata.title, then fall back to the URL
+        title_value = title if title is not None else None
+        try:
+            if (title_value is None) and metadata and isinstance(metadata, dict):
+                title_value = metadata.get('title')
+        except Exception:
+            title_value = title_value
+
+        if title_value is None:
+            title_value = url or ''
+
         with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 # Check if document already exists
@@ -46,14 +59,15 @@ class DocumentRepository:
                     print(f"Document already exists: {existing['id']}")
                     return dict(existing)
 
-                # Insert new document
+                # Insert new document - serialize metadata to JSON and cast to jsonb
+                metadata_json = json.dumps(metadata or {})
                 cur.execute(
                     """
-                    INSERT INTO documents (url, title, checksum, metadata, created_at)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO documents (source_url, title, checksum, metadata, created_at)
+                    VALUES (%s, %s, %s, %s::jsonb, %s)
                     RETURNING *
                     """,
-                    (url, title, checksum, metadata or {}, datetime.now())
+                    (url, title_value, checksum, metadata_json, datetime.now())
                 )
                 document = cur.fetchone()
                 conn.commit()
@@ -110,14 +124,16 @@ class DocumentRepository:
         """
         with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
+                # Serialize metadata and cast to jsonb on update
+                metadata_json = json.dumps(metadata)
                 cur.execute(
                     """
                     UPDATE documents
-                    SET metadata = %s
+                    SET metadata = %s::jsonb
                     WHERE id = %s
                     RETURNING *
                     """,
-                    (metadata, document_id)
+                    (metadata_json, document_id)
                 )
                 result = cur.fetchone()
                 conn.commit()

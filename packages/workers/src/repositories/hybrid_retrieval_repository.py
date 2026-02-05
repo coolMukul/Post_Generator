@@ -80,8 +80,9 @@ class HybridRetrievalRepository:
         min_score: float = None,
         vector_weight: float = None,
         keyword_weight: float = None,
-        rrf_k: int = None
-    ) -> List[SearchResult]:
+        rrf_k: int = None,
+        debug: bool = False
+    ) -> Any:
         """
         Perform hybrid retrieval combining vector and keyword search.
 
@@ -135,6 +136,18 @@ class HybridRetrievalRepository:
             r for r in merged_results
             if r.score >= min_score
         ]
+
+        if debug:
+            # Return intermediate data for debugging
+            return {
+                'vector_results': [ {'id': vid, 'rank': rank} for vid, rank in vector_results ],
+                'keyword_results': [ {'id': kid, 'rank': rank} for kid, rank in keyword_results ],
+                'merged_count': len(merged_results),
+                'merged_results': [ {'id': r.id, 'score': r.score, 'rank_source': r.rank_source} for r in merged_results ],
+                'filtered_count': len(filtered_results),
+                'filtered_results': [ {'id': r.id, 'score': r.score, 'rank_source': r.rank_source} for r in filtered_results ],
+                'final': [r for r in filtered_results[:limit]]
+            }
 
         return filtered_results[:limit]
 
@@ -432,8 +445,12 @@ class HybridRetrievalRepository:
         query: str,
         project_key: str,
         limit: int = 20,
-        min_score: float = 0.3
-    ) -> List[Dict[str, Any]]:
+        min_score: float = 0.3,
+        debug: bool = False,
+        disable_fulltext: bool = False,
+        disable_ilike: bool = False,
+        disable_token: bool = False
+    ) -> Any:
         """
         Perform simple keyword search as a fallback when embeddings aren't available.
         Searches against documents table using title and metadata.
@@ -482,18 +499,23 @@ class HybridRetrievalRepository:
                 cur.execute("SELECT COUNT(*) as count FROM documents")
                 doc_count = cur.fetchone()
                 logger.info(f"📊 [KEYWORD SEARCH] Total documents in table: {doc_count['count']}")
-                
-                # Check if any documents match the full-text search
-                cur.execute("""
-                    SELECT COUNT(*) as count FROM documents d
-                    WHERE to_tsvector('english', COALESCE(d.title, '') || ' ' || COALESCE(d.metadata::text, ''))
-                        @@ plainto_tsquery('english', %s)
-                """, (query,))
-                match_count = cur.fetchone()
-                logger.info(f"📊 [KEYWORD SEARCH] Documents matching query: {match_count['count']}")
-                
-                # If no matches, let's inspect a sample and attempt an ILIKE fallback
+
                 rows = []
+
+                match_count = {'count': 0}
+                # Check full-text matches unless explicitly disabled
+                if not disable_fulltext:
+                    cur.execute("""
+                        SELECT COUNT(*) as count FROM documents d
+                        WHERE to_tsvector('english', COALESCE(d.title, '') || ' ' || COALESCE(d.metadata::text, ''))
+                            @@ plainto_tsquery('english', %s)
+                    """, (query,))
+                    match_count = cur.fetchone()
+                    logger.info(f"📊 [KEYWORD SEARCH] Documents matching query: {match_count['count']}")
+                else:
+                    logger.info("📊 [KEYWORD SEARCH] Full-text matching disabled by debug flag")
+
+                # If no matches (or full-text disabled), attempt fallbacks
                 if match_count['count'] == 0:
                     cur.execute("SELECT id, title, metadata FROM documents LIMIT 5")
                     sample_docs = cur.fetchall()
@@ -502,72 +524,88 @@ class HybridRetrievalRepository:
                         logger.warning(f"   - ID: {doc['id']}, Title: {doc.get('title', 'N/A')}")
 
                     # Try a safe ILIKE substring fallback against title and metadata->>'title'
-                    try:
-                        ilike_sql = """
-                            SELECT
-                                d.id,
-                                d.id as document_id,
-                                0 as chunk_index,
-                                COALESCE(d.title, '') as content,
-                                d.title as document_title,
-                                NULL as context_summary,
-                                d.metadata,
-                                1.0 as score
-                            FROM documents d
-                            WHERE COALESCE(d.title, '') ILIKE %s
-                               OR COALESCE(d.metadata->>'title', '') ILIKE %s
-                            LIMIT %s
-                        """
+                    # ILIKE fallback unless disabled
+                    if not disable_ilike:
+                        try:
+                            ilike_sql = """
+                                SELECT
+                                    d.id,
+                                    d.id as document_id,
+                                    0 as chunk_index,
+                                    COALESCE(d.title, '') as content,
+                                    d.title as document_title,
+                                    NULL as context_summary,
+                                    d.metadata,
+                                    1.0 as score
+                                FROM documents d
+                                WHERE COALESCE(d.title, '') ILIKE %s
+                                   OR COALESCE(d.metadata->>'title', '') ILIKE %s
+                                LIMIT %s
+                            """
 
-                        pattern = f"%{query}%"
-                        logger.info("📝 [KEYWORD SEARCH] Running ILIKE fallback with pattern=%s", pattern)
-                        cur.execute(ilike_sql, (pattern, pattern, limit))
-                        rows = cur.fetchall()
-                        logger.info("📊 [KEYWORD SEARCH] ILIKE fallback rows returned: %d", len(rows))
+                            pattern = f"%{query}%"
+                            logger.info("📝 [KEYWORD SEARCH] Running ILIKE fallback with pattern=%s", pattern)
+                            cur.execute(ilike_sql, (pattern, pattern, limit))
+                            rows = cur.fetchall()
+                            logger.info("📊 [KEYWORD SEARCH] ILIKE fallback rows returned: %d", len(rows))
+                        except Exception as e:
+                            logger.error("❌ [KEYWORD SEARCH] ILIKE fallback failed: %s", str(e), exc_info=True)
+                    else:
+                        logger.info("📊 [KEYWORD SEARCH] ILIKE fallback disabled by debug flag")
 
-                        # If still no rows, try individual token matching against metadata::text
-                        if not rows:
-                            try:
-                                tokens = [w.strip() for w in re.split(r"\s+", query) if w.strip()]
-                                if tokens:
-                                    # Build dynamic WHERE clause: metadata::text ILIKE %token% OR title ILIKE %token%
-                                    where_clauses = []
-                                    params = []
-                                    for tok in tokens:
-                                        where_clauses.append("COALESCE(d.metadata::text, '') ILIKE %s")
-                                        params.append(f"%{tok}%")
-                                        where_clauses.append("COALESCE(d.title, '') ILIKE %s")
-                                        params.append(f"%{tok}%")
+                    # If still no rows, try individual token matching against metadata::text unless disabled
+                    if not rows and not disable_token:
+                        try:
+                            tokens = [w.strip() for w in re.split(r"\s+", query) if w.strip()]
+                            if tokens:
+                                # Build dynamic WHERE clause: metadata::text ILIKE %token% OR title ILIKE %token%
+                                where_clauses = []
+                                params = []
+                                for tok in tokens:
+                                    where_clauses.append("COALESCE(d.metadata::text, '') ILIKE %s")
+                                    params.append(f"%{tok}%")
+                                    where_clauses.append("COALESCE(d.title, '') ILIKE %s")
+                                    params.append(f"%{tok}%")
 
-                                    meta_sql = f"""
-                                        SELECT
-                                            d.id,
-                                            d.id as document_id,
-                                            0 as chunk_index,
-                                            COALESCE(d.title, '') as content,
-                                            d.title as document_title,
-                                            NULL as context_summary,
-                                            d.metadata,
-                                            1.0 as score
-                                        FROM documents d
-                                        WHERE ({' OR '.join(where_clauses)})
-                                        LIMIT %s
-                                    """
-                                    params.append(limit)
-                                    logger.info("📝 [KEYWORD SEARCH] Running metadata::text token fallback with tokens=%s", tokens)
-                                    cur.execute(meta_sql, tuple(params))
-                                    rows = cur.fetchall()
-                                    logger.info("📊 [KEYWORD SEARCH] metadata::text token fallback rows returned: %d", len(rows))
-                            except Exception as e:
-                                logger.error("❌ [KEYWORD SEARCH] metadata token fallback failed: %s", str(e), exc_info=True)
-                    except Exception as e:
-                        logger.error("❌ [KEYWORD SEARCH] ILIKE fallback failed: %s", str(e), exc_info=True)
+                                meta_sql = f"""
+                                    SELECT
+                                        d.id,
+                                        d.id as document_id,
+                                        0 as chunk_index,
+                                        COALESCE(d.title, '') as content,
+                                        d.title as document_title,
+                                        NULL as context_summary,
+                                        d.metadata,
+                                        1.0 as score
+                                    FROM documents d
+                                    WHERE ({' OR '.join(where_clauses)})
+                                    LIMIT %s
+                                """
+                                params.append(limit)
+                                logger.info("📝 [KEYWORD SEARCH] Running metadata::text token fallback with tokens=%s", tokens)
+                                cur.execute(meta_sql, tuple(params))
+                                rows = cur.fetchall()
+                                logger.info("📊 [KEYWORD SEARCH] metadata::text token fallback rows returned: %d", len(rows))
+                        except Exception as e:
+                            logger.error("❌ [KEYWORD SEARCH] metadata token fallback failed: %s", str(e), exc_info=True)
+                    else:
+                        if not disable_token:
+                            logger.info("📊 [KEYWORD SEARCH] metadata::text token fallback skipped because prior fallback returned rows")
+                        else:
+                            logger.info("📊 [KEYWORD SEARCH] metadata::text token fallback disabled by debug flag")
                 else:
                     # Execute the main search query when full-text matches exist
                     cur.execute(sql_query, (query, query, limit))
                     rows = cur.fetchall()
                 
                 logger.info(f"📊 [KEYWORD SEARCH] Raw rows returned: {len(rows)}")
+                # Build debug payload pieces
+                debug_payload = {
+                    'doc_count': doc_count['count'],
+                    'fulltext_match_count': match_count['count'] if isinstance(match_count, dict) else match_count,
+                    'ilike_count': len(rows) if rows else 0,
+                    'rows_sample': [dict(row) for row in rows[:5]]
+                }
                 
                 if rows:
                     for idx, row in enumerate(rows[:3]):  # Log first 3 for debugging
@@ -618,4 +656,27 @@ class HybridRetrievalRepository:
                         logger.debug(f"❌ [KEYWORD SEARCH] Filtered out doc {row['id']} (score {normalized_score} < {min_score})")
                 
                 logger.info(f"✅ [KEYWORD SEARCH] Returning {len(results)} results after filtering")
+                if debug:
+                    return {
+                        'debug': True,
+                        'query': query,
+                        'project_key': project_key,
+                        'limit': limit,
+                        'min_score': min_score,
+                        'disable_fulltext': disable_fulltext,
+                        'disable_ilike': disable_ilike,
+                        'disable_token': disable_token,
+                        'doc_count': doc_count['count'],
+                        'fulltext_match_count': match_count['count'] if isinstance(match_count, dict) else match_count,
+                        'returned_rows': [
+                            {
+                                'id': str(row['id']),
+                                'title': row.get('document_title'),
+                                'raw_score': float(row.get('score') or 0.0) if row.get('score') is not None else 0.0,
+                                'metadata': row.get('metadata')
+                            } for row in rows
+                        ],
+                        'filtered_results': results
+                    }
+
                 return results
