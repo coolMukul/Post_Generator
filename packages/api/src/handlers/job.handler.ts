@@ -1,5 +1,5 @@
 import { Job } from 'bullmq';
-import { pdfProcessingQueue, agentTasksQueue } from '../config/queue.js';
+import { pdfProcessingQueue, agentTasksQueue, redisClient, QUEUE_NAMES } from '../config/queue.js';
 import { JobStatus, JobStatusResponse } from '../types/schemas.js';
 
 // Helper to get job from any queue
@@ -11,6 +11,87 @@ async function getJobFromQueues(jobId: string): Promise<Job | null> {
   // Try agent tasks queue
   job = await agentTasksQueue.getJob(jobId);
   if (job) return job;
+
+  return null;
+}
+
+// Direct Redis lookup for job data (fallback when BullMQ getJob fails)
+interface RedisJobData {
+  jobId: string;
+  queueName: string;
+  state: 'waiting' | 'active' | 'completed' | 'failed' | 'delayed';
+  data: Record<string, unknown> | null;
+  returnvalue: unknown | null;
+  failedReason: string | null;
+  timestamp: number;
+  processedOn: number | null;
+  finishedOn: number | null;
+  progress: number;
+}
+
+async function getJobFromRedis(jobId: string): Promise<RedisJobData | null> {
+  // Try to find job in different queues
+  const queues = [QUEUE_NAMES.AGENT_TASKS, QUEUE_NAMES.PDF_PROCESSING];
+
+  for (const queueName of queues) {
+    const jobKey = `bull:${queueName}:${jobId}`;
+
+    // Check if job hash exists
+    const exists = await redisClient.exists(jobKey);
+    if (!exists) continue;
+
+    // Get job data from hash
+    const jobHash = await redisClient.hgetall(jobKey);
+    if (!jobHash || Object.keys(jobHash).length === 0) continue;
+
+    // Determine state by checking which list contains the job
+    let state: RedisJobData['state'] = 'waiting';
+
+    const inWait = await redisClient.lpos(`bull:${queueName}:wait`, jobId);
+    const inActive = await redisClient.lpos(`bull:${queueName}:active`, jobId);
+    const inCompleted = await redisClient.lpos(`bull:${queueName}:completed`, jobId);
+    const inFailed = await redisClient.lpos(`bull:${queueName}:failed`, jobId);
+
+    if (inCompleted !== null) state = 'completed';
+    else if (inFailed !== null) state = 'failed';
+    else if (inActive !== null) state = 'active';
+    else if (inWait !== null) state = 'waiting';
+    else if (jobHash.finishedOn && jobHash.returnvalue) state = 'completed';
+    else if (jobHash.finishedOn && jobHash.failedReason) state = 'failed';
+
+    // Parse job data
+    let data: Record<string, unknown> | null = null;
+    if (jobHash.data) {
+      try {
+        data = JSON.parse(jobHash.data);
+      } catch {
+        data = null;
+      }
+    }
+
+    // Parse returnvalue
+    let returnvalue: unknown | null = null;
+    if (jobHash.returnvalue) {
+      try {
+        returnvalue = JSON.parse(jobHash.returnvalue);
+      } catch {
+        returnvalue = jobHash.returnvalue;
+      }
+    }
+
+    return {
+      jobId,
+      queueName,
+      state,
+      data,
+      returnvalue,
+      failedReason: jobHash.failedReason || null,
+      timestamp: parseInt(jobHash.timestamp || '0', 10),
+      processedOn: jobHash.processedOn ? parseInt(jobHash.processedOn, 10) : null,
+      finishedOn: jobHash.finishedOn ? parseInt(jobHash.finishedOn, 10) : null,
+      progress: parseInt(jobHash.progress || '0', 10),
+    };
+  }
 
   return null;
 }
@@ -66,24 +147,40 @@ export interface JobStatusForUI {
 }
 
 export const getJobStatusForUI = async (jobId: string): Promise<JobStatusForUI> => {
+  // Try BullMQ first
   const job = await getJobFromQueues(jobId);
 
-  if (!job) {
-    throw new Error('Job not found');
+  if (job) {
+    const state = await job.getState();
+    return {
+      job_id: job.id!,
+      state: state as JobStatusForUI['state'],
+      returnvalue: job.returnvalue || null,
+      failedReason: job.failedReason || null,
+      progress: (job.progress as number) || 0,
+      timestamp: job.timestamp,
+      processedOn: job.processedOn || null,
+      finishedOn: job.finishedOn || null,
+    };
   }
 
-  const state = await job.getState();
+  // Fallback: direct Redis lookup
+  const redisJob = await getJobFromRedis(jobId);
 
-  return {
-    job_id: job.id!,
-    state: state as JobStatusForUI['state'],
-    returnvalue: job.returnvalue || null,
-    failedReason: job.failedReason || null,
-    progress: (job.progress as number) || 0,
-    timestamp: job.timestamp,
-    processedOn: job.processedOn || null,
-    finishedOn: job.finishedOn || null,
-  };
+  if (redisJob) {
+    return {
+      job_id: redisJob.jobId,
+      state: redisJob.state,
+      returnvalue: redisJob.returnvalue,
+      failedReason: redisJob.failedReason,
+      progress: redisJob.progress,
+      timestamp: redisJob.timestamp,
+      processedOn: redisJob.processedOn,
+      finishedOn: redisJob.finishedOn,
+    };
+  }
+
+  throw new Error('Job not found');
 };
 
 export const listJobs = async (status?: JobStatus, limit = 50): Promise<JobStatusResponse[]> => {
