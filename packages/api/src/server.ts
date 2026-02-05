@@ -9,6 +9,7 @@ import { healthRoutes } from './routes/health.routes.js';
 import { jobRoutes } from './routes/job.routes.js';
 import { pdfRoutes } from './routes/pdf.routes.js';
 import { queryRoutes } from './routes/query.routes.js';
+import { agentRoutes } from './routes/agent.routes.js';
 
 // Create Fastify instance
 const fastify = Fastify({
@@ -52,7 +53,8 @@ async function registerPlugins() {
         { name: 'Health', description: 'Health check endpoints' },
         { name: 'Jobs', description: 'Job management endpoints' },
         { name: 'PDF', description: 'PDF processing endpoints' },
-        { name: 'Query', description: 'Vector search endpoints' }
+        { name: 'Query', description: 'Vector search endpoints' },
+        { name: 'Agents', description: 'AI agent endpoints (Phase 4 & 5)' }
       ]
     }
   });
@@ -74,6 +76,7 @@ async function registerRoutes() {
   await fastify.register(jobRoutes);
   await fastify.register(pdfRoutes);
   await fastify.register(queryRoutes);
+  await fastify.register(agentRoutes);
 }
 
 // Startup checks

@@ -1,9 +1,22 @@
 import { Job } from 'bullmq';
-import { pdfProcessingQueue } from '../config/queue.js';
+import { pdfProcessingQueue, agentTasksQueue } from '../config/queue.js';
 import { JobStatus, JobStatusResponse } from '../types/schemas.js';
 
+// Helper to get job from any queue
+async function getJobFromQueues(jobId: string): Promise<Job | null> {
+  // Try PDF processing queue first
+  let job = await pdfProcessingQueue.getJob(jobId);
+  if (job) return job;
+
+  // Try agent tasks queue
+  job = await agentTasksQueue.getJob(jobId);
+  if (job) return job;
+
+  return null;
+}
+
 export const getJobStatus = async (jobId: string): Promise<JobStatusResponse> => {
-  const job = await pdfProcessingQueue.getJob(jobId);
+  const job = await getJobFromQueues(jobId);
 
   if (!job) {
     throw new Error('Job not found');
@@ -37,6 +50,39 @@ export const getJobStatus = async (jobId: string): Promise<JobStatusResponse> =>
     result: job.returnvalue || null,
     error: job.failedReason || null,
     progress: progress || 0,
+  };
+};
+
+// UI-friendly job status with BullMQ-style field names
+export interface JobStatusForUI {
+  job_id: string;
+  state: 'completed' | 'failed' | 'active' | 'waiting' | 'delayed';
+  returnvalue: unknown | null;
+  failedReason: string | null;
+  progress: number;
+  timestamp: number;
+  processedOn: number | null;
+  finishedOn: number | null;
+}
+
+export const getJobStatusForUI = async (jobId: string): Promise<JobStatusForUI> => {
+  const job = await getJobFromQueues(jobId);
+
+  if (!job) {
+    throw new Error('Job not found');
+  }
+
+  const state = await job.getState();
+
+  return {
+    job_id: job.id!,
+    state: state as JobStatusForUI['state'],
+    returnvalue: job.returnvalue || null,
+    failedReason: job.failedReason || null,
+    progress: (job.progress as number) || 0,
+    timestamp: job.timestamp,
+    processedOn: job.processedOn || null,
+    finishedOn: job.finishedOn || null,
   };
 };
 

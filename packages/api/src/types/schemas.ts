@@ -149,6 +149,122 @@ export const HealthCheckSchema = z.object({
   })
 });
 
+// Agent Schemas
+export enum AgentType {
+  RESEARCH_QUERY = 'research-query',
+  INSIGHT_EXTRACTION = 'insight-extraction',
+  LINKEDIN_POST = 'linkedin-post',
+  CONTENT_WORKFLOW = 'content-workflow'
+}
+
+export const AgentRunRequestSchema = z.object({
+  agentType: z.nativeEnum(AgentType).describe('Type of agent to run'),
+  input: z.record(z.unknown()).describe('Agent-specific input parameters')
+});
+
+export const ResearchQueryInputSchema = z.object({
+  query: z.string().min(1).describe('Search query'),
+  maxResults: z.number().min(1).max(50).default(10).optional(),
+  minScore: z.number().min(0).max(1).default(0.01).optional(),
+  includeContext: z.boolean().default(true).optional()
+});
+
+export const InsightExtractionInputSchema = z.object({
+  query: z.string().min(1).describe('Topic or query for insight extraction'),
+  maxResults: z.number().min(1).max(20).default(5).optional(),
+  minScore: z.number().min(0).max(1).default(0.3).optional()
+});
+
+export const LinkedInPostInputSchema = z.object({
+  title: z.string().optional().describe('Optional post title'),
+  insights: z.array(z.object({
+    claim: z.string(),
+    confidence: z.number().optional(),
+    evidence: z.array(z.object({
+      excerpt: z.string(),
+      documentId: z.string().optional(),
+      chunkIndex: z.number().optional()
+    })).optional()
+  })).describe('Insights to include in the post'),
+  tone: z.enum(['professional', 'casual', 'thought-leadership']).default('professional').optional(),
+  maxLength: z.number().min(100).max(3000).default(700).optional()
+});
+
+export const ContentWorkflowInputSchema = z.object({
+  query: z.string().min(1).describe('Research topic or question'),
+  maxResults: z.number().min(1).max(20).default(5).optional(),
+  tone: z.enum(['professional', 'casual', 'thought-leadership']).default('professional').optional(),
+  maxPostLength: z.number().min(100).max(3000).default(700).optional()
+});
+
+export const AgentJobResponseSchema = z.object({
+  success: z.boolean(),
+  jobId: z.string(),
+  agentType: z.nativeEnum(AgentType),
+  message: z.string().optional()
+});
+
+// Agent result schemas
+export const SearchResultSchema = z.object({
+  id: z.string(),
+  documentId: z.string(),
+  documentTitle: z.string().optional(),
+  chunkIndex: z.number(),
+  content: z.string(),
+  contextSummary: z.string().nullable(),
+  score: z.number(),
+  rankSource: z.enum(['vector', 'keyword', 'hybrid'])
+});
+
+export const InsightSchema = z.object({
+  id: z.string(),
+  claim: z.string(),
+  summary: z.string().optional(),
+  confidence: z.number(),
+  tags: z.array(z.string()).optional(),
+  evidence: z.array(z.object({
+    excerpt: z.string(),
+    documentId: z.string().optional(),
+    chunkIndex: z.number().optional(),
+    score: z.number().optional()
+  })).optional()
+});
+
+export const ResearchQueryResultSchema = z.object({
+  query: z.string(),
+  resultsCount: z.number(),
+  results: z.array(SearchResultSchema),
+  executionTimeMs: z.number(),
+  agentSteps: z.array(z.string()).optional()
+});
+
+export const InsightExtractionResultSchema = z.object({
+  query: z.string(),
+  insights: z.array(InsightSchema),
+  executionTimeMs: z.number()
+});
+
+export const LinkedInPostResultSchema = z.object({
+  post: z.string(),
+  hashtags: z.array(z.string()).optional(),
+  length: z.number(),
+  tone: z.string()
+});
+
+export const ContentWorkflowResultSchema = z.object({
+  query: z.string(),
+  searchResults: z.array(SearchResultSchema).optional(),
+  insights: z.array(InsightSchema).optional(),
+  post: LinkedInPostResultSchema.optional(),
+  executionTimeMs: z.number(),
+  steps: z.array(z.object({
+    name: z.string(),
+    status: z.enum(['completed', 'failed', 'skipped']),
+    durationMs: z.number().optional(),
+    error: z.string().optional()
+  }))
+});
+
 // TypeScript Types
 export type Document = z.infer<typeof DocumentSchema>;
 export type CreateDocument = z.infer<typeof CreateDocumentSchema>;
@@ -163,3 +279,17 @@ export type QueryRequest = z.infer<typeof QueryRequestSchema>;
 export type QueryResult = z.infer<typeof QueryResultSchema>;
 export type QueryResponse = z.infer<typeof QueryResponseSchema>;
 export type HealthCheck = z.infer<typeof HealthCheckSchema>;
+
+// Agent Types
+export type AgentRunRequest = z.infer<typeof AgentRunRequestSchema>;
+export type ResearchQueryInput = z.infer<typeof ResearchQueryInputSchema>;
+export type InsightExtractionInput = z.infer<typeof InsightExtractionInputSchema>;
+export type LinkedInPostInput = z.infer<typeof LinkedInPostInputSchema>;
+export type ContentWorkflowInput = z.infer<typeof ContentWorkflowInputSchema>;
+export type AgentJobResponse = z.infer<typeof AgentJobResponseSchema>;
+export type SearchResult = z.infer<typeof SearchResultSchema>;
+export type Insight = z.infer<typeof InsightSchema>;
+export type ResearchQueryResult = z.infer<typeof ResearchQueryResultSchema>;
+export type InsightExtractionResult = z.infer<typeof InsightExtractionResultSchema>;
+export type LinkedInPostResult = z.infer<typeof LinkedInPostResultSchema>;
+export type ContentWorkflowResult = z.infer<typeof ContentWorkflowResultSchema>;
