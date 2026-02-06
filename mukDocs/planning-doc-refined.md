@@ -13,40 +13,6 @@ User interacts with a separate UI project that connects to a backend API. The sy
 
 ---
 
-## Guiding Principles
-
-**Cost:** Use free APIs for personal use where possible.
-**Quality:** Follow industry best practices targeting scalable enterprise architecture.
-**Observability:** Console logs required to track agent and tool progress.
-**Dependencies:** Minimize new dependencies; reuse existing ones.
-**Documentation:** All documents should be created in mukDocs folder. Prefix with Phase number in case its phase related.
-
-## Coding Guidelines
-- api should call handlers and submit a bullmq job. Only chatting related scenario will have syncronouse pattern.
-- api should use strict typed input and output schema using swagger.
-- use zod or something similar for strict type check
-- sharable objects, data types, schema, etc to be placed in types folder
-- No cyclic refrences
-- External system should poll the api to check job status. Job output is json.
-- Job status are 
-    - Failed with Error message, Start time, End time
-    - Success with job result, Start time, End time
-    - InProgress with Start time
-- Later we intend to implement SSE(out of scope for now), but code should have option to easily extend this feature.
-- 
-
-### What You CAN'T Use
-❌ Any code from any company IP or licensed sources
-
-### What You CAN Use
-✅ Architectural patterns learned (multi-agent, RAG, StateGraph)
-✅ Technology choices (LangGraph, Fastify, Next.js, pgvector)
-✅ Design principles (per-tenant isolation, hybrid search, contextual embeddings)
-✅ Your expertise in building these systems
-✅ Public knowledge from LangChain/LangGraph documentation
-
----
-
 ## Architecture Overview
 
 ### Conceptual Patterns
@@ -76,28 +42,6 @@ User interacts with a separate UI project that connects to a backend API. The sy
 | Tone | Formal, regulatory | Casual to professional (variable) |
 | Scale | Multi-council (B2G) | Personal/small team (B2C) |
 | Auth | Enterprise SSO | Simple auth or none initially |
-
----
-
-## Project Structure
-
-```
-post_generator/
-├── src/
-│   ├── api/              # FastAPI routes
-│   ├── workers/          # Background tasks (Celery/ARQ)
-│   ├── agents/           # LangGraph agents
-│   ├── services/         # Shared business logic
-│   ├── repositories/     # Data access
-│   ├── models/           # Pydantic schemas
-│   └── config/           # Settings
-├── tests/
-├── scripts/              # DB migrations, utilities
-├── pyproject.toml
-├── .env
-├── mukDocs/
-└── README.md
-```
 
 ---
 
