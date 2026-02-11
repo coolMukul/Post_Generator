@@ -25,7 +25,7 @@
    error?: string;
  }
 
- const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3101';
+ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3201';
 
  export default function SearchPage() {
    const [query, setQuery] = useState('');
@@ -104,7 +104,7 @@
    };
 
    const pollJobStatus = async (jobId: string) => {
-     const pollInterval = 60; // Poll every 60 seconds
+     const pollInterval = 5; // Poll every 5 seconds
      let countdownInterval: NodeJS.Timeout;
 
      const poll = async () => {

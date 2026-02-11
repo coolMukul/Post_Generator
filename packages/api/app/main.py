@@ -1,92 +1,172 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
+"""FastAPI application – thin API layer.
+
+Responsibilities:
+  - Accept requests from the UI.
+  - Submit jobs to the Redis main_queue via JobStore.
+  - Serve job status / results back to the UI via polling.
+  - No business logic – all heavy lifting happens in the worker.
+"""
 import os
 import sys
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import Optional
 
-# Ensure the workers package (packages/workers/src) is importable
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Make the workers package importable so we can reuse JobStore / repos / config
+# ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parents[3]
-WORKERS_SRC = ROOT / 'packages' / 'workers' / 'src'
+WORKERS_SRC = ROOT / "packages" / "workers" / "src"
 sys.path.insert(0, str(WORKERS_SRC))
 
-try:
-    from worker import HybridWorker
-except Exception:
-    HybridWorker = None
+from services.job_store import JobStore  # noqa: E402
+from repositories.document_repository import DocumentRepository  # noqa: E402
+from config import get_database_url, get_redis_url  # noqa: E402
 
-app = FastAPI(title="Post Generator API (Python)", version="0.1.0")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s  %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# App & middleware
+# ---------------------------------------------------------------------------
+app = FastAPI(title="Post Generator API", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Shared instances (created once at startup)
+_job_store: Optional[JobStore] = None
+_doc_repo: Optional[DocumentRepository] = None
 
 
 @app.on_event("startup")
-async def _log_docs_urls():
+async def _startup():
+    global _job_store, _doc_repo
+    _job_store = JobStore()
+    _doc_repo = DocumentRepository(get_database_url())
+
     host = os.getenv("API_HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", "8000"))
+    port = int(os.getenv("API_PORT", "3201"))
     display_host = "localhost" if host == "0.0.0.0" else host
-    docs_url = f"http://{display_host}:{port}/docs"
-    redoc_url = f"http://{display_host}:{port}/redoc"
-    # Print so it appears clearly in the console logs
-    print(f"Swagger UI: {docs_url}")
-    print(f"ReDoc: {redoc_url}")
+    logger.info("Swagger UI : http://%s:%d/docs", display_host, port)
+    logger.info("ReDoc       : http://%s:%d/redoc", display_host, port)
 
 
-class EmbeddingRequest(BaseModel):
-    embedding: List[float]
-    top_k: Optional[int] = 10
-    document_id: Optional[int] = None
+# ---------------------------------------------------------------------------
+# Request / response models
+# ---------------------------------------------------------------------------
+class SearchSubmitRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    searchMode: str = Field(default="hybrid")
+    limit: int = Field(default=10, ge=1, le=100)
+    minScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    vectorWeight: float = Field(default=0.7, ge=0.0, le=1.0)
+    keywordWeight: float = Field(default=0.3, ge=0.0, le=1.0)
+    documentId: Optional[str] = None
 
 
-class TextQueryRequest(BaseModel):
-    text: str
-    top_k: Optional[int] = 10
-    document_id: Optional[int] = None
-
-
-def _text_to_embedding(text: str, dim: int = 8) -> List[float]:
-    """Deterministic text->embedding converter.
-
-    This is a simple, deterministic converter (SHA256-based) to produce
-    a numeric vector for passing to the worker. It is NOT a semantic
-    embedding and should be replaced by a proper embedding service
-    (OpenAI, etc.) when available.
-    """
-    import hashlib
-    h = hashlib.sha256(text.encode('utf-8')).digest()
-    vals: List[float] = []
-    for i in range(dim):
-        byte = h[i % len(h)]
-        vals.append((byte / 255.0) * 2.0 - 1.0)
-    return vals
-
-
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    """Health check – verifies DB and Redis connectivity."""
+    db_ok = False
+    redis_ok = False
+
+    try:
+        import psycopg
+        with psycopg.connect(get_database_url()) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        db_ok = True
+    except Exception as exc:
+        logger.warning("Health check DB failed: %s", exc)
+
+    try:
+        import redis as redis_lib
+        r = redis_lib.Redis.from_url(get_redis_url())
+        r.ping()
+        redis_ok = True
+    except Exception as exc:
+        logger.warning("Health check Redis failed: %s", exc)
+
+    status = "healthy" if (db_ok and redis_ok) else "unhealthy"
+    return {
+        "status": status,
+        "services": {"database": db_ok, "redis": redis_ok},
+    }
 
 
-@app.post("/hybrid_search/embedding")
-async def hybrid_search_by_embedding(req: EmbeddingRequest):
-    if HybridWorker is None:
-        raise HTTPException(status_code=500, detail="HybridWorker not available")
-
-    worker = HybridWorker()
-    results = worker.similarity_search(req.embedding, limit=req.top_k or 10, document_id=req.document_id)
-    return {"results": results, "query_embedding_len": len(req.embedding)}
+@app.get("/documents/count")
+async def documents_count():
+    """Return total document count."""
+    count = _doc_repo.count_documents()
+    return {"count": count}
 
 
-@app.post("/hybrid_search/query")
-async def hybrid_search_by_text(req: TextQueryRequest):
-    if HybridWorker is None:
-        raise HTTPException(status_code=500, detail="HybridWorker not available")
+@app.post("/search/submit")
+async def search_submit(req: SearchSubmitRequest):
+    """Submit a hybrid_retrieval job to the worker queue."""
+    job_data = {
+        "query": req.query,
+        "search_mode": req.searchMode,
+        "limit": req.limit,
+        "min_score": req.minScore,
+        "vector_weight": req.vectorWeight,
+        "keyword_weight": req.keywordWeight,
+        "document_id": req.documentId,
+    }
+    job_id = _job_store.create_job("hybrid_retrieval", job_data)
+    logger.info("Search job submitted: id=%s  query=%r", job_id, req.query)
+    return {"jobId": job_id}
 
-    # Convert text to embedding and delegate to worker
-    embedding = _text_to_embedding(req.text)
-    worker = HybridWorker()
-    results = worker.similarity_search(embedding, limit=req.top_k or 10, document_id=req.document_id)
-    return {"results": results, "query": req.text, "embedding_len": len(embedding)}
+
+@app.get("/queue/jobs/{job_id}")
+async def job_status(job_id: str):
+    """Poll for the status of a background job."""
+    job = _job_store.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    status = job["status"]
+    response = {
+        "jobId": job["job_id"],
+        "state": "completed" if status == "success" else ("failed" if status == "failed" else "active"),
+        "status": status,
+        "startTime": job.get("start_time"),
+        "endTime": job.get("end_time"),
+    }
+
+    if status == "success":
+        response["returnvalue"] = job.get("result")
+    elif status == "failed":
+        response["failedReason"] = job.get("error")
+
+    return response
 
 
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=int(os.getenv("API_PORT", "8000")), reload=True)
+
+    uvicorn.run(
+        "app.main:app",
+        host=os.getenv("API_HOST", "0.0.0.0"),
+        port=int(os.getenv("API_PORT", "3201")),
+        reload=True,
+    )

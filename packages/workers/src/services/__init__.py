@@ -1,2 +1,5 @@
 """Business logic services."""
-# Service implementations will be added in later phases
+from .embedding_service import EmbeddingService
+from .job_store import JobStore
+
+__all__ = ["EmbeddingService", "JobStore"]

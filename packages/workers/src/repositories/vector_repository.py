@@ -1,194 +1,223 @@
-"""Vector repository for database operations."""
+"""Vector repository for document_vectors table operations."""
+import logging
 from typing import List, Optional, Dict, Any
 import psycopg
 from psycopg.rows import dict_row
 from pgvector.psycopg import register_vector
 
+logger = logging.getLogger(__name__)
+
 
 class VectorRepository:
-    """Repository for vector operations."""
+    """Repository for vector CRUD and search operations against document_vectors."""
 
     def __init__(self, connection_string: str):
-        """Initialize repository with database connection."""
         self.connection_string = connection_string
 
     def create_vector(
         self,
-        document_id: int,
+        project_document_id: str,
         chunk_index: int,
         content: str,
         embedding: List[float],
         context_summary: Optional[str] = None,
-        token_count: Optional[int] = None
+        token_count: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Create a new vector entry.
-
-        Args:
-            document_id: Related document ID
-            chunk_index: Index of the chunk in the document
-            content: Text content
-            embedding: Vector embedding (1536 dimensions)
-            context_summary: Optional context summary
-            token_count: Optional token count
-
-        Returns:
-            Created vector dictionary
-        """
+        """Insert a single vector into document_vectors."""
         with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
-            # Register pgvector extension
             register_vector(conn)
-
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO vectors (document_id, chunk_index, content, context_summary,
-                                       embedding, token_count)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO document_vectors
+                        (project_document_id, chunk_index, content, context_summary,
+                         embedding, token_count, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING *
                     """,
-                    (document_id, chunk_index, content, context_summary, embedding, token_count)
+                    (
+                        project_document_id,
+                        chunk_index,
+                        content,
+                        context_summary,
+                        embedding,
+                        token_count,
+                        psycopg.types.json.Json(metadata or {}),
+                    ),
                 )
                 vector = cur.fetchone()
                 conn.commit()
-
-                print(f"Vector created: document_id={document_id}, chunk_index={chunk_index}")
+                logger.info(
+                    "Vector created: project_document_id=%s chunk_index=%s",
+                    project_document_id,
+                    chunk_index,
+                )
                 return dict(vector)
 
-    def bulk_create_vectors(
-        self,
-        vectors: List[Dict[str, Any]]
-    ) -> int:
-        """
-        Bulk insert multiple vectors.
-
-        Args:
-            vectors: List of vector dictionaries with keys:
-                    document_id, chunk_index, content, embedding,
-                    context_summary (optional), token_count (optional)
-
-        Returns:
-            Number of vectors inserted
-        """
+    def bulk_create_vectors(self, vectors: List[Dict[str, Any]]) -> int:
+        """Bulk insert multiple vectors into document_vectors."""
         if not vectors:
             return 0
 
         with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
             register_vector(conn)
-
             with conn.cursor() as cur:
-                # Prepare batch insert
                 values = [
                     (
-                        v['document_id'],
-                        v['chunk_index'],
-                        v['content'],
-                        v.get('context_summary'),
-                        v['embedding'],
-                        v.get('token_count')
+                        v["project_document_id"],
+                        v["chunk_index"],
+                        v["content"],
+                        v.get("context_summary"),
+                        v["embedding"],
+                        v.get("token_count"),
+                        psycopg.types.json.Json(v.get("metadata", {})),
                     )
                     for v in vectors
                 ]
-
                 cur.executemany(
                     """
-                    INSERT INTO vectors (document_id, chunk_index, content, context_summary,
-                                       embedding, token_count)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO document_vectors
+                        (project_document_id, chunk_index, content, context_summary,
+                         embedding, token_count, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
-                    values
+                    values,
                 )
                 conn.commit()
-
-                print(f"Bulk inserted {len(vectors)} vectors")
+                logger.info("Bulk inserted %d vectors", len(vectors))
                 return len(vectors)
 
     def similarity_search(
         self,
         query_embedding: List[float],
         limit: int = 10,
-        document_id: Optional[int] = None
+        project_document_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Perform similarity search using cosine distance.
-
-        Args:
-            query_embedding: Query vector embedding
-            limit: Maximum number of results
-            document_id: Optional filter by document ID
-
-        Returns:
-            List of similar vectors with similarity scores
-        """
+        """Cosine similarity search with document title join."""
         with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
             register_vector(conn)
-
             with conn.cursor() as cur:
-                if document_id:
+                if project_document_id:
                     cur.execute(
                         """
-                        SELECT *,
-                               1 - (embedding <=> %s::vector) as similarity
-                        FROM vectors
-                        WHERE document_id = %s
-                        ORDER BY embedding <=> %s::vector
+                        SELECT dv.id, dv.project_document_id, dv.chunk_index,
+                               dv.content, dv.context_summary, dv.token_count,
+                               dv.metadata,
+                               1 - (dv.embedding <=> %s::vector) AS similarity,
+                               d.title AS document_title,
+                               d.id AS document_id
+                        FROM document_vectors dv
+                        JOIN project_documents pd ON dv.project_document_id = pd.id
+                        JOIN documents d ON pd.document_id = d.id
+                        WHERE dv.project_document_id = %s
+                        ORDER BY dv.embedding <=> %s::vector
                         LIMIT %s
                         """,
-                        (query_embedding, document_id, query_embedding, limit)
+                        (query_embedding, project_document_id, query_embedding, limit),
                     )
                 else:
                     cur.execute(
                         """
-                        SELECT *,
-                               1 - (embedding <=> %s::vector) as similarity
-                        FROM vectors
-                        ORDER BY embedding <=> %s::vector
+                        SELECT dv.id, dv.project_document_id, dv.chunk_index,
+                               dv.content, dv.context_summary, dv.token_count,
+                               dv.metadata,
+                               1 - (dv.embedding <=> %s::vector) AS similarity,
+                               d.title AS document_title,
+                               d.id AS document_id
+                        FROM document_vectors dv
+                        JOIN project_documents pd ON dv.project_document_id = pd.id
+                        JOIN documents d ON pd.document_id = d.id
+                        ORDER BY dv.embedding <=> %s::vector
                         LIMIT %s
                         """,
-                        (query_embedding, query_embedding, limit)
+                        (query_embedding, query_embedding, limit),
                     )
+                return [dict(row) for row in cur.fetchall()]
 
-                results = cur.fetchall()
-                return [dict(row) for row in results]
+    def keyword_search(
+        self,
+        query_text: str,
+        limit: int = 10,
+        project_document_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Full-text keyword search using PostgreSQL ts_vector / ts_query."""
+        with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                if project_document_id:
+                    cur.execute(
+                        """
+                        SELECT dv.id, dv.project_document_id, dv.chunk_index,
+                               dv.content, dv.context_summary, dv.token_count,
+                               dv.metadata,
+                               ts_rank_cd(
+                                   to_tsvector('english', dv.content),
+                                   plainto_tsquery('english', %s)
+                               ) AS rank,
+                               d.title AS document_title,
+                               d.id AS document_id
+                        FROM document_vectors dv
+                        JOIN project_documents pd ON dv.project_document_id = pd.id
+                        JOIN documents d ON pd.document_id = d.id
+                        WHERE to_tsvector('english', dv.content)
+                              @@ plainto_tsquery('english', %s)
+                          AND dv.project_document_id = %s
+                        ORDER BY rank DESC
+                        LIMIT %s
+                        """,
+                        (query_text, query_text, project_document_id, limit),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT dv.id, dv.project_document_id, dv.chunk_index,
+                               dv.content, dv.context_summary, dv.token_count,
+                               dv.metadata,
+                               ts_rank_cd(
+                                   to_tsvector('english', dv.content),
+                                   plainto_tsquery('english', %s)
+                               ) AS rank,
+                               d.title AS document_title,
+                               d.id AS document_id
+                        FROM document_vectors dv
+                        JOIN project_documents pd ON dv.project_document_id = pd.id
+                        JOIN documents d ON pd.document_id = d.id
+                        WHERE to_tsvector('english', dv.content)
+                              @@ plainto_tsquery('english', %s)
+                        ORDER BY rank DESC
+                        LIMIT %s
+                        """,
+                        (query_text, query_text, limit),
+                    )
+                return [dict(row) for row in cur.fetchall()]
 
-    def get_vectors_by_document(self, document_id: int) -> List[Dict[str, Any]]:
-        """
-        Get all vectors for a document.
-
-        Args:
-            document_id: Document ID
-
-        Returns:
-            List of vector dictionaries
-        """
+    def get_vectors_by_document(self, project_document_id: str) -> List[Dict[str, Any]]:
+        """Get all vectors for a given project_document_id."""
         with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT * FROM vectors
-                    WHERE document_id = %s
+                    SELECT * FROM document_vectors
+                    WHERE project_document_id = %s
                     ORDER BY chunk_index
                     """,
-                    (document_id,)
+                    (project_document_id,),
                 )
-                results = cur.fetchall()
-                return [dict(row) for row in results]
+                return [dict(row) for row in cur.fetchall()]
 
-    def delete_vectors_by_document(self, document_id: int) -> int:
-        """
-        Delete all vectors for a document.
-
-        Args:
-            document_id: Document ID
-
-        Returns:
-            Number of vectors deleted
-        """
+    def delete_vectors_by_document(self, project_document_id: str) -> int:
+        """Delete all vectors for a given project_document_id."""
         with psycopg.connect(self.connection_string, row_factory=dict_row) as conn:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM vectors WHERE document_id = %s", (document_id,))
+                cur.execute(
+                    "DELETE FROM document_vectors WHERE project_document_id = %s",
+                    (project_document_id,),
+                )
                 deleted_count = cur.rowcount
                 conn.commit()
-
-                print(f"Deleted {deleted_count} vectors for document {document_id}")
+                logger.info(
+                    "Deleted %d vectors for project_document_id=%s",
+                    deleted_count,
+                    project_document_id,
+                )
                 return deleted_count
