@@ -1,4 +1,5 @@
-import { z } from 'zod';
+// REMOVED: TypeScript schemas migrated to Python data models
+// Keep schema definitions in Python worker/API as pydantic models.
 
 // Job Status Enum
 export enum JobStatus {

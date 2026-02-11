@@ -56,4 +56,4 @@ export const searchVectors = async (queryData: QueryRequest): Promise<QueryRespo
       total: 0,
     };
   }
-};
+  // REMOVED: query handler migrated to Python API/worker

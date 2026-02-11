@@ -1,6 +1,3 @@
-import { FastifyInstance } from 'fastify';
-import { getHealthStatus } from '../handlers/health.handler.js';
-import { HealthCheckSchema } from '../types/schemas.js';
 
 export async function healthRoutes(fastify: FastifyInstance) {
   fastify.get('/health', {
@@ -32,8 +29,7 @@ export async function healthRoutes(fastify: FastifyInstance) {
       }
     },
     handler: async (_request, reply) => {
-      const health = await getHealthStatus();
-      return reply.code(health.status === 'healthy' ? 200 : 503).send(health);
+      return reply.send({ message: 'Health route has been removed.' });
     }
   });
 
