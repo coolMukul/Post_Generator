@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "python -m uvicorn app.main:app --host 0.0.0.0 --port 3201 --reload",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "vitest",
