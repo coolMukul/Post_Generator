@@ -57,21 +57,19 @@ class Settings(BaseSettings):
 # Global settings instance
 settings = Settings()
 
-# --- Startup diagnostics ---
+# --- Startup diagnostics (use print so they show before logging is configured) ---
 if _ENV_FILE.exists():
-    logger.info("Loaded .env from: %s", _ENV_FILE)
+    print(f"[config] Loaded .env from: {_ENV_FILE}")
 else:
-    logger.warning(
-        ".env NOT FOUND at: %s  — copy .env.example to .env and fill in your keys!",
-        _ENV_FILE,
-    )
+    print(f"[config] WARNING: .env NOT FOUND at: {_ENV_FILE}")
+    print("[config]   -> copy .env.example to .env and fill in your keys!")
 
-logger.info("EMBEDDING_PROVIDER=%s", settings.embedding_provider)
+print(f"[config] EMBEDDING_PROVIDER={settings.embedding_provider}")
 
 if settings.embedding_provider == "gemini" and not settings.gemini_api_key:
-    logger.error("EMBEDDING_PROVIDER=gemini but GEMINI_API_KEY is not set! Add it to .env")
+    print("[config] ERROR: EMBEDDING_PROVIDER=gemini but GEMINI_API_KEY is not set!")
 elif settings.embedding_provider == "openai" and not settings.openai_api_key:
-    logger.error("EMBEDDING_PROVIDER=openai but OPENAI_API_KEY is not set! Add it to .env")
+    print("[config] ERROR: EMBEDDING_PROVIDER=openai but OPENAI_API_KEY is not set!")
 
 
 def get_database_url() -> str:
