@@ -6,11 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "python -m uvicorn app.main:app --host 0.0.0.0 --port 3201 --reload",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "test": "vitest",
-    "lint": "eslint src --ext .ts",
-    "clean": "rm -rf dist node_modules"
+    "build": "echo 'Python API – nothing to compile'",
+    "start": "python -m uvicorn app.main:app --host 0.0.0.0 --port 3201",
+    "test": "python -m pytest",
+    "lint": "echo 'Python API – use ruff/flake8 directly'",
+    "clean": "rm -rf __pycache__ .pytest_cache"
   },
   "dependencies": {
     "@fastify/swagger": "^8.14.0",
