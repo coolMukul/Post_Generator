@@ -52,6 +52,8 @@ class EmbeddingService:
         else:
             raise ValueError(f"Unsupported EMBEDDING_PROVIDER: {self.provider!r}")
 
+        # Use print() so this shows even before logging is configured
+        print(f"[config] Provider initialized: provider={self.provider} model={self.model} dimension={self.dimension}")
         logger.info(
             "EmbeddingService initialised: provider=%s  model=%s  dimension=%d",
             self.provider, self.model, self.dimension,
