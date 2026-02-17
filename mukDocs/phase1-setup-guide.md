@@ -318,6 +318,7 @@ See `scripts/init_db.sql` for the complete schema.
 **Terminal 1 - API Server:**
 ```powershell
 cd packages\api
+.\venv\Scripts\activate
 pnpm dev
 ```
 
@@ -339,6 +340,7 @@ pnpm dev
 **Terminal 1 - API Server:**
 ```bash
 cd packages/api
+source venv/bin/activate
 pnpm dev
 ```
 
@@ -466,6 +468,7 @@ curl -X POST http://localhost:3201/pdf/process \
 ```powershell
 # PowerShell
 cd packages\api
+.\venv\Scripts\activate
 pnpm dev          # Hot reload
 pnpm build        # Production build
 pnpm lint         # Linting
