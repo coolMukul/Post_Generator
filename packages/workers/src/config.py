@@ -5,6 +5,10 @@ from pydantic_settings import BaseSettings
 from pathlib import Path
 import logging
 
+logger = logging.getLogger(__name__)
+
+_ENV_FILE = Path(__file__).resolve().parents[3] / '.env'
+
 
 class Settings(BaseSettings):
     """Application settings."""
@@ -44,7 +48,7 @@ class Settings(BaseSettings):
 
     # Pydantic v2 model config: load env from repo root and ignore unknown env keys
     model_config = {
-        "env_file": str(Path(__file__).resolve().parents[3] / '.env'),
+        "env_file": str(_ENV_FILE),
         "case_sensitive": False,
         "extra": "ignore",
     }
@@ -52,6 +56,22 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+# --- Startup diagnostics ---
+if _ENV_FILE.exists():
+    logger.info("Loaded .env from: %s", _ENV_FILE)
+else:
+    logger.warning(
+        ".env NOT FOUND at: %s  — copy .env.example to .env and fill in your keys!",
+        _ENV_FILE,
+    )
+
+logger.info("EMBEDDING_PROVIDER=%s", settings.embedding_provider)
+
+if settings.embedding_provider == "gemini" and not settings.gemini_api_key:
+    logger.error("EMBEDDING_PROVIDER=gemini but GEMINI_API_KEY is not set! Add it to .env")
+elif settings.embedding_provider == "openai" and not settings.openai_api_key:
+    logger.error("EMBEDDING_PROVIDER=openai but OPENAI_API_KEY is not set! Add it to .env")
 
 
 def get_database_url() -> str:

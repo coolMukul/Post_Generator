@@ -33,12 +33,22 @@ class EmbeddingService:
         self.model, self.dimension = _resolve(self.provider)
 
         if self.provider == "gemini":
+            key = settings.gemini_api_key
+            if key:
+                logger.info("GEMINI_API_KEY found (%s…%s)", key[:4], key[-4:])
+            else:
+                logger.error("GEMINI_API_KEY is NOT set — embedding calls will fail!")
             import google.generativeai as genai
-            genai.configure(api_key=settings.gemini_api_key)
+            genai.configure(api_key=key)
             self._genai = genai
         elif self.provider == "openai":
+            key = settings.openai_api_key
+            if key:
+                logger.info("OPENAI_API_KEY found (%s…%s)", key[:4], key[-4:])
+            else:
+                logger.error("OPENAI_API_KEY is NOT set — embedding calls will fail!")
             from openai import OpenAI
-            self._openai = OpenAI(api_key=settings.openai_api_key)
+            self._openai = OpenAI(api_key=key)
         else:
             raise ValueError(f"Unsupported EMBEDDING_PROVIDER: {self.provider!r}")
 
