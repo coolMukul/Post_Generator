@@ -17,15 +17,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
-# Make the workers package importable so we can reuse JobStore / repos / config
+# Make the workers package importable so we can reuse JobStore / repos / config.
+# We add "packages/workers" (not "packages/workers/src") so that relative
+# imports inside the `src` package continue to work.
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parents[3]
-WORKERS_SRC = ROOT / "packages" / "workers" / "src"
-sys.path.insert(0, str(WORKERS_SRC))
+WORKERS_PKG = ROOT / "packages" / "workers"
+sys.path.insert(0, str(WORKERS_PKG))
 
-from services.job_store import JobStore  # noqa: E402
-from repositories.document_repository import DocumentRepository  # noqa: E402
-from config import get_database_url, get_redis_url  # noqa: E402
+from src.services.job_store import JobStore  # noqa: E402
+from src.repositories.document_repository import DocumentRepository  # noqa: E402
+from src.config import get_database_url, get_redis_url  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
