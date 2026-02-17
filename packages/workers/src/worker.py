@@ -55,7 +55,7 @@ class HybridWorker:
 
         # --- Vector search ---
         if request.search_mode in (SearchMode.VECTOR, SearchMode.HYBRID):
-            logger.info("Step 1/3: Generating query embedding via OpenAI")
+            logger.info("Step 1/3: Generating query embedding via %s", self.embedding_service.provider)
             query_embedding = self.embedding_service.embed_query(request.query)
 
             logger.info("Step 2/3: Running vector similarity search")

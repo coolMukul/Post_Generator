@@ -25,8 +25,16 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
     redis_password: str | None = Field(default=None, alias="REDIS_PASSWORD")
 
+    # Embedding provider: "openai" or "gemini"
+    embedding_provider: str = Field(default="openai", alias="EMBEDDING_PROVIDER")
+    embedding_model: str | None = Field(default=None, alias="EMBEDDING_MODEL")
+    embedding_dimension: int | None = Field(default=None, alias="EMBEDDING_DIMENSION")
+
     # OpenAI
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+
+    # Google Gemini
+    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
 
     # LlamaParse
     llama_cloud_api_key: str | None = Field(default=None, alias="LLAMA_CLOUD_API_KEY")
