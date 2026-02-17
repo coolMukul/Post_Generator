@@ -25,6 +25,9 @@ from .services.embedding_service import EmbeddingService
 from .services.job_store import JobStore
 from .agents.registry import AgentRegistry
 from .agents.research_agent import ResearchAgent
+from .agents.engineer_agent import EngineerAgent
+from .agents.ui_agent import UIAgent
+from .agents.todo_manager_agent import TODOManagerAgent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -215,6 +218,9 @@ def _init_agent_registry() -> AgentRegistry:
     registry = AgentRegistry()
     registry.load_manifests()
     registry.register_agent("ResearchAgent", ResearchAgent)
+    registry.register_agent("EngineerAgent", EngineerAgent)
+    registry.register_agent("UIAgent", UIAgent)
+    registry.register_agent("TODOManagerAgent", TODOManagerAgent)
     logger.info(
         "Agent registry initialized: %d manifests, %d registered",
         registry.manifest_count(),

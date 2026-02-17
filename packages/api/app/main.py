@@ -202,11 +202,19 @@ async def agent_run(req: AgentRunSubmitRequest):
     The worker will instantiate the named agent via the AgentRegistry,
     execute it, and store the result. Poll via GET /queue/jobs/{jobId}.
     """
-    if _agent_registry and not _agent_registry.get_manifest(req.agentName):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown agent: {req.agentName}. Use GET /agent/list to see available agents.",
-        )
+    if _agent_registry:
+        manifest = _agent_registry.get_manifest(req.agentName)
+        if not manifest:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown agent: {req.agentName}. Use GET /agent/list to see available agents.",
+            )
+        if not _agent_registry.has_agent(req.agentName):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Agent '{req.agentName}' has a manifest but no registered implementation. "
+                f"Available registered agents: {[a['name'] for a in _agent_registry.list_agents() if a['registered']]}",
+            )
 
     job_data = {
         "agent_name": req.agentName,
