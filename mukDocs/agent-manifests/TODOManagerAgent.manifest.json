@@ -1,0 +1,41 @@
+{
+  "name": "TODOManagerAgent",
+  "version": "1.0.0",
+  "description": "Manages mukDocs/TODO.md. Appends, completes, and prioritizes TODO entries. Publishes markdown snippets when publish=true.",
+  "tools": [],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": { "type": "string", "enum": ["append", "complete", "update", "list"] },
+      "entry": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "details": { "type": "string" },
+          "phase": { "type": "string" },
+          "priority": { "type": "string", "enum": ["high", "medium", "low"] }
+        }
+      },
+      "publish": { "type": "boolean", "default": false }
+    },
+    "required": ["action"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "id": { "type": "string" },
+      "details": { "type": "string" },
+      "created_at": { "type": "string", "format": "date-time" },
+      "phase": { "type": "string" },
+      "priority": { "type": "string" },
+      "markdown_snippet": { "type": "string" },
+      "published": { "type": "boolean" }
+    },
+    "required": ["id", "details", "phase", "priority"]
+  },
+  "time_budget": {
+    "default_seconds": 30,
+    "max_seconds": 60
+  },
+  "queue_job_type": "agent_run"
+}

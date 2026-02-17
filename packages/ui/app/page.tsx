@@ -5,19 +5,18 @@ export default function HomePage() {
     <div className="container">
       <header style={{ textAlign: 'center', marginBottom: '3rem', color: 'white' }}>
         <h1 style={{ fontSize: '3rem', fontWeight: 'bold', marginBottom: '1rem' }}>
-          🔬 Research Insight
+          Research Insight
         </h1>
         <p style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>
           AI-Powered LinkedIn Content from Academic Research
         </p>
         <p style={{ fontSize: '1rem', opacity: 0.8 }}>
-          Personal Learning Project - Phase 4 Complete
+          Personal Learning Project - Phase 5 Active
         </p>
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
         <Link href="/ingest" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
             Document Ingestion
           </h2>
@@ -25,12 +24,11 @@ export default function HomePage() {
             Submit research papers via URL or file upload
           </p>
           <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#10b981', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
-            ✓ Phase 2 Complete
+            Phase 2 Complete
           </div>
         </Link>
 
         <Link href="/hybrid-search" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
             Hybrid Retrieval System
           </h2>
@@ -38,12 +36,11 @@ export default function HomePage() {
             Search and retrieve relevant research insights
           </p>
           <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#10b981', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
-            ✓ Phase 3 Complete
+            Phase 3 Complete
           </div>
         </Link>
 
         <Link href="/research-query-agent" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🤖</div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
             Research Query Agent
           </h2>
@@ -51,12 +48,35 @@ export default function HomePage() {
             AI agent with LangGraph for intelligent retrieval
           </p>
           <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#10b981', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
-            ✓ Phase 4 Active
+            Phase 4 Complete
+          </div>
+        </Link>
+
+        <Link href="/agent-run" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+            Agent Run
+          </h2>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>
+            Submit agent runs and content pipeline jobs, poll results
+          </p>
+          <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#667eea', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
+            Phase 4+5 Active
+          </div>
+        </Link>
+
+        <Link href="/agent-logs" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+            Agent Logs
+          </h2>
+          <p style={{ color: '#666', marginBottom: '1rem' }}>
+            View team interaction logs and agent communication
+          </p>
+          <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#667eea', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
+            Phase 4+5 Active
           </div>
         </Link>
 
         <Link href="/insight-extraction-agent" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔎</div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
             Insight Extraction Agent
           </h2>
@@ -64,62 +84,61 @@ export default function HomePage() {
             Extract concise insights from the ingested corpus
           </p>
           <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#06b6d4', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
-            Beta
+            Phase 5 Active
           </div>
         </Link>
 
-        <div className="card" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✨</div>
+        <Link href="/linkedin-post-agent" className="card" style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', transition: 'transform 0.2s' }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '0.5rem' }}>
             Content Generation
           </h2>
           <p style={{ color: '#666', marginBottom: '1rem' }}>
             AI-generated LinkedIn posts from research
           </p>
-          <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#6b7280', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
-            Phase 5 Planned
+          <div style={{ display: 'inline-block', padding: '0.25rem 0.75rem', backgroundColor: '#06b6d4', color: 'white', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600' }}>
+            Phase 5 Active
           </div>
-        </div>
+        </Link>
       </div>
 
       <div className="card" style={{ marginBottom: '2rem' }}>
         <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
-          ✅ Implementation Status
+          Implementation Status
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.875rem' }}>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ Paper Downloader
+            Phase 1: Foundation
           </div>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ LlamaParse Integration
+            Phase 2: Document Ingestion
           </div>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ Document Chunking
+            Phase 3: Hybrid Retrieval (RRF)
           </div>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ Contextual Summaries
+            Phase 4: Agent Framework
+          </div>
+          <div style={{ padding: '0.75rem', backgroundColor: '#eff6ff', borderRadius: '0.375rem' }}>
+            Phase 5: Content Pipeline (Active)
           </div>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ Embedding Service
+            Multi-Provider Embeddings
           </div>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ Vector Database
+            Agent Registry + Manifests
           </div>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ Hybrid Search (RRF)
+            LangGraph Workflows
           </div>
           <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ LangGraph Agent
-          </div>
-          <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem' }}>
-            ✓ API Endpoints
+            Team Interaction Logging
           </div>
         </div>
       </div>
 
       <div className="card">
         <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
-          🏗️ Architecture Stack
+          Architecture Stack
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', fontSize: '0.875rem', textAlign: 'center' }}>
           <div>
@@ -128,15 +147,15 @@ export default function HomePage() {
           </div>
           <div>
             <strong style={{ color: '#667eea' }}>API</strong>
-            <p style={{ color: '#666', marginTop: '0.25rem' }}>Fastify<br/>BullMQ</p>
+            <p style={{ color: '#666', marginTop: '0.25rem' }}>FastAPI<br/>Pydantic</p>
           </div>
           <div>
             <strong style={{ color: '#667eea' }}>Workers</strong>
-            <p style={{ color: '#666', marginTop: '0.25rem' }}>LangChain<br/>LlamaIndex</p>
+            <p style={{ color: '#666', marginTop: '0.25rem' }}>LangChain<br/>LangGraph</p>
           </div>
           <div>
             <strong style={{ color: '#667eea' }}>AI</strong>
-            <p style={{ color: '#666', marginTop: '0.25rem' }}>OpenAI<br/>GPT-4</p>
+            <p style={{ color: '#666', marginTop: '0.25rem' }}>OpenAI / Gemini<br/>Multi-Provider</p>
           </div>
           <div>
             <strong style={{ color: '#667eea' }}>Database</strong>
@@ -144,16 +163,15 @@ export default function HomePage() {
           </div>
           <div>
             <strong style={{ color: '#667eea' }}>Queue</strong>
-            <p style={{ color: '#666', marginTop: '0.25rem' }}>Redis<br/>BullMQ</p>
+            <p style={{ color: '#666', marginTop: '0.25rem' }}>Redis<br/>BLPOP</p>
           </div>
         </div>
       </div>
 
       <footer style={{ textAlign: 'center', marginTop: '3rem', padding: '1.5rem', color: '#666', fontSize: '0.875rem' }}>
         <p>Built from scratch as a learning project</p>
-        <p style={{ marginTop: '0.5rem' }}>Zero code reused from emtech-impulse • Safe for public portfolio</p>
+        <p style={{ marginTop: '0.5rem' }}>Zero code reused from emtech-impulse - Safe for public portfolio</p>
       </footer>
     </div>
   );
 }
-// ...existing code ends at the closing brace of the HomePage component

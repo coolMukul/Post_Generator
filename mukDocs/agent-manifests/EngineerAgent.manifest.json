@@ -1,0 +1,42 @@
+{
+  "name": "EngineerAgent",
+  "version": "1.0.0",
+  "description": "Maps tasks to code-level steps, files to create/modify, unit-test files, and shell snippets. Reports blocked status and blockers.",
+  "tools": ["search_papers", "summarize_chunk", "cite_source"],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "task_id": { "type": "string" },
+      "title": { "type": "string" },
+      "description": { "type": "string" },
+      "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+      "required_files": { "type": "array", "items": { "type": "string" } }
+    },
+    "required": ["task_id", "title", "description"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "task_id": { "type": "string" },
+      "steps": { "type": "array", "items": {
+        "type": "object",
+        "properties": {
+          "step_name": { "type": "string" },
+          "action": { "type": "string", "enum": ["create", "modify", "delete"] },
+          "file_path": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }},
+      "unit_test_files": { "type": "array", "items": { "type": "string" } },
+      "shell_snippets": { "type": "array", "items": { "type": "string" } },
+      "blocked": { "type": "boolean" },
+      "blocks": { "type": "array", "items": { "type": "string" } }
+    },
+    "required": ["task_id", "steps", "unit_test_files", "blocked"]
+  },
+  "time_budget": {
+    "default_seconds": 180,
+    "max_seconds": 600
+  },
+  "queue_job_type": "agent_run"
+}

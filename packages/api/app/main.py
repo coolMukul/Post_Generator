@@ -5,12 +5,25 @@ Responsibilities:
   - Submit jobs to the Redis main_queue via JobStore.
   - Serve job status / results back to the UI via polling.
   - No business logic – all heavy lifting happens in the worker.
+
+Endpoints (Phase 3):
+  POST /search/submit         – hybrid_retrieval job
+  GET  /queue/jobs/{job_id}   – poll any job status
+  GET  /health                – DB + Redis health check
+  GET  /documents/count       – total document count
+
+Endpoints (Phase 4+5):
+  POST /agent/run             – submit an agent_run job
+  GET  /agent/runs/{run_id}   – poll agent run status (alias for /queue/jobs)
+  GET  /agent/list            – list registered agents
+  POST /content/pipeline      – submit a content_pipeline job (Phase 5)
 """
 import os
 import sys
+import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +41,7 @@ sys.path.insert(0, str(WORKERS_PKG))
 from src.services.job_store import JobStore  # noqa: E402
 from src.repositories.document_repository import DocumentRepository  # noqa: E402
 from src.config import get_database_url, get_redis_url  # noqa: E402
+from src.agents.registry import AgentRegistry  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,7 +52,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # App & middleware
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Post Generator API", version="0.2.0")
+app = FastAPI(title="Post Generator API", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,13 +65,18 @@ app.add_middleware(
 # Shared instances (created once at startup)
 _job_store: Optional[JobStore] = None
 _doc_repo: Optional[DocumentRepository] = None
+_agent_registry: Optional[AgentRegistry] = None
 
 
 @app.on_event("startup")
 async def _startup():
-    global _job_store, _doc_repo
+    global _job_store, _doc_repo, _agent_registry
     _job_store = JobStore()
     _doc_repo = DocumentRepository(get_database_url())
+
+    _agent_registry = AgentRegistry()
+    _agent_registry.load_manifests()
+    logger.info("Agent registry loaded: %d manifests", _agent_registry.manifest_count())
 
     host = os.getenv("API_HOST", "0.0.0.0")
     port = int(os.getenv("API_PORT", "3201"))
@@ -79,8 +98,21 @@ class SearchSubmitRequest(BaseModel):
     documentId: Optional[str] = None
 
 
+class AgentRunSubmitRequest(BaseModel):
+    agentName: str = Field(..., min_length=1)
+    input: Dict[str, Any] = Field(default_factory=dict)
+    config: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ContentPipelineSubmitRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    searchMode: str = Field(default="hybrid")
+    limit: int = Field(default=10, ge=1, le=100)
+    minScore: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 # ---------------------------------------------------------------------------
-# Endpoints
+# Phase 3 Endpoints
 # ---------------------------------------------------------------------------
 @app.get("/health")
 async def health():
@@ -158,6 +190,68 @@ async def job_status(job_id: str):
         response["failedReason"] = job.get("error")
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 Endpoints – Agent Framework
+# ---------------------------------------------------------------------------
+@app.post("/agent/run")
+async def agent_run(req: AgentRunSubmitRequest):
+    """Submit an agent_run job to the worker queue.
+
+    The worker will instantiate the named agent via the AgentRegistry,
+    execute it, and store the result. Poll via GET /queue/jobs/{jobId}.
+    """
+    if _agent_registry and not _agent_registry.get_manifest(req.agentName):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown agent: {req.agentName}. Use GET /agent/list to see available agents.",
+        )
+
+    job_data = {
+        "agent_name": req.agentName,
+        "input": req.input,
+        "config": req.config,
+    }
+    job_id = _job_store.create_job("agent_run", job_data)
+    logger.info("Agent run submitted: id=%s  agent=%s", job_id, req.agentName)
+    return {"jobId": job_id, "agentName": req.agentName}
+
+
+@app.get("/agent/runs/{run_id}")
+async def agent_run_status(run_id: str):
+    """Poll agent run status (delegates to /queue/jobs)."""
+    return await job_status(run_id)
+
+
+@app.get("/agent/list")
+async def agent_list():
+    """List all registered agents with metadata."""
+    if _agent_registry is None:
+        return {"agents": []}
+    agents = _agent_registry.list_agents()
+    return {"agents": agents}
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 Endpoints – Content Pipeline
+# ---------------------------------------------------------------------------
+@app.post("/content/pipeline")
+async def content_pipeline(req: ContentPipelineSubmitRequest):
+    """Submit a content_pipeline job (Phase 5 multi-stage workflow).
+
+    The worker will run: retrieval → insight extraction → draft generation
+    → citation validation. Poll via GET /queue/jobs/{jobId}.
+    """
+    job_data = {
+        "query": req.query,
+        "search_mode": req.searchMode,
+        "limit": req.limit,
+        "min_score": req.minScore,
+    }
+    job_id = _job_store.create_job("content_pipeline", job_data)
+    logger.info("Content pipeline submitted: id=%s  query=%r", job_id, req.query)
+    return {"jobId": job_id}
 
 
 # ---------------------------------------------------------------------------

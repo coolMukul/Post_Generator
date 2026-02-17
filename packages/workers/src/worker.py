@@ -1,8 +1,10 @@
-"""Hybrid retrieval worker.
+"""Hybrid retrieval and agent-run worker.
 
-Processes jobs from the Redis main_queue.  Each job runs the
-hybrid_retrieve pipeline: embed query -> vector search -> keyword search
--> fuse results with Reciprocal Rank Fusion (RRF) -> return ranked list.
+Processes jobs from the Redis main_queue.  Supported job types:
+  - hybrid_retrieval: embed query -> vector search -> keyword search
+    -> fuse results with Reciprocal Rank Fusion (RRF) -> return ranked list.
+  - agent_run: instantiate an agent via the AgentRegistry and run it.
+  - content_pipeline: run the Phase 5 multi-stage content workflow.
 
 Guidelines followed:
   - All business logic lives here, not in the API layer.
@@ -16,10 +18,13 @@ from typing import Dict, Any, List, Optional
 
 from .config import get_database_url
 from .models.schemas import SearchMode, SearchRequest, SearchResult, SearchResponse
+from .models.agent_schemas import AgentRunRequest
 from .repositories.vector_repository import VectorRepository
 from .repositories.document_repository import DocumentRepository
 from .services.embedding_service import EmbeddingService
 from .services.job_store import JobStore
+from .agents.registry import AgentRegistry
+from .agents.research_agent import ResearchAgent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -202,6 +207,23 @@ class HybridWorker:
 
 
 # ------------------------------------------------------------------
+# Agent registry setup
+# ------------------------------------------------------------------
+
+def _init_agent_registry() -> AgentRegistry:
+    """Load manifests and register all known agents."""
+    registry = AgentRegistry()
+    registry.load_manifests()
+    registry.register_agent("ResearchAgent", ResearchAgent)
+    logger.info(
+        "Agent registry initialized: %d manifests, %d registered",
+        registry.manifest_count(),
+        registry.registered_count(),
+    )
+    return registry
+
+
+# ------------------------------------------------------------------
 # Worker loop – listens on Redis main_queue
 # ------------------------------------------------------------------
 
@@ -220,6 +242,7 @@ def run_worker_loop():
     signal.signal(signal.SIGTERM, _shutdown)
 
     worker = HybridWorker()
+    agent_registry = _init_agent_registry()
     logger.info("Worker loop started – listening on main_queue")
 
     while _RUNNING:
@@ -240,6 +263,31 @@ def run_worker_loop():
                 request = SearchRequest(**job["data"])
                 response = worker.hybrid_retrieve(request)
                 worker.job_store.mark_success(job_id, response.model_dump())
+
+            elif job_type == "agent_run":
+                data = job["data"]
+                agent_name = data.get("agent_name", "")
+                agent_input = data.get("input", {})
+                logger.info("[Agent:Worker][step:dispatch] agent=%s run_id=%s", agent_name, job_id)
+
+                agent = agent_registry.create_agent(agent_name)
+                result = agent.run(run_id=job_id, input_data=agent_input)
+                worker.job_store.mark_success(job_id, result.model_dump(mode="json"))
+
+            elif job_type == "content_pipeline":
+                from .agents.workflows.content_pipeline import run_content_pipeline
+
+                data = job["data"]
+                logger.info("[Agent:Worker][step:content_pipeline] run_id=%s", job_id)
+                pipeline_result = run_content_pipeline(
+                    query=data.get("query", ""),
+                    search_mode=data.get("search_mode", "hybrid"),
+                    limit=data.get("limit", 10),
+                    min_score=data.get("min_score", 0.0),
+                    run_id=job_id,
+                )
+                worker.job_store.mark_success(job_id, pipeline_result)
+
             else:
                 worker.job_store.mark_failed(job_id, f"Unknown job type: {job_type}")
 

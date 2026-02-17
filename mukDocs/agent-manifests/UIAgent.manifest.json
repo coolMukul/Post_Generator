@@ -1,0 +1,61 @@
+{
+  "name": "UIAgent",
+  "version": "1.0.0",
+  "description": "Designs modern UI (Next.js 15 + TypeScript + App Router), implements pages/components, provides UI tests and acceptance checks.",
+  "tools": [],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "task_id": { "type": "string" },
+      "page_spec": {
+        "type": "object",
+        "properties": {
+          "route": { "type": "string" },
+          "components": { "type": "array", "items": { "type": "string" } },
+          "api_calls": { "type": "array", "items": {
+            "type": "object",
+            "properties": {
+              "method": { "type": "string", "enum": ["GET", "POST"] },
+              "path": { "type": "string" },
+              "body_schema": { "type": "string" }
+            }
+          }}
+        }
+      }
+    },
+    "required": ["task_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "task_id": { "type": "string" },
+      "ui_spec": { "type": "array", "items": {
+        "type": "object",
+        "properties": {
+          "component": { "type": "string" },
+          "path": { "type": "string" },
+          "props": { "type": "string" },
+          "api_calls": { "type": "array" },
+          "mock_data_allowed": { "type": "boolean", "const": false }
+        }
+      }},
+      "test_spec": { "type": "array", "items": {
+        "type": "object",
+        "properties": {
+          "case_id": { "type": "string" },
+          "type": { "type": "string", "enum": ["component", "integration", "e2e", "manual"] },
+          "description": { "type": "string" },
+          "test_files": { "type": "array", "items": { "type": "string" } }
+        }
+      }},
+      "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+      "estimated_hours": { "type": "number" }
+    },
+    "required": ["task_id", "ui_spec", "test_spec", "acceptance_criteria"]
+  },
+  "time_budget": {
+    "default_seconds": 300,
+    "max_seconds": 900
+  },
+  "queue_job_type": "agent_run"
+}
