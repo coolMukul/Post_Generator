@@ -11,17 +11,30 @@
 
 ## Completed Changes
 
-### Phase 3 – Hybrid Retrieval Rewrite (2026-02-11)
+### Phase 3 – Hybrid Retrieval Rewrite + Gemini Embedding Migration (2026-02-17) ✅
 
 **Worker layer (`packages/workers/src/`)**
 
 - Created `models/schemas.py` – Pydantic models: JobStatus, SearchMode, SearchRequest, SearchResult, SearchResponse, JobRecord
 - Rewrote `repositories/vector_repository.py` – corrected table from `vectors` to `document_vectors`, changed IDs from integer to UUID (`project_document_id`), added `keyword_search()` using PostgreSQL full-text search (`ts_rank_cd` + `plainto_tsquery`)
 - Rewrote `repositories/document_repository.py` – UUID-based, added `count_documents()`, `link_document_to_project()`, `get_project_by_key()`
-- Created `services/embedding_service.py` – OpenAI `text-embedding-3-small` (1536 dimensions), `embed_query()` and `embed_texts()` methods
+- **Updated `services/embedding_service.py`** – **Multi-provider embedding support:**
+  - ✅ Migrated from deprecated `google.generativeai` (<=0.7.x) to `google.genai` SDK (v1.0.0+)
+  - ✅ Updated default model from `text-embedding-004` (deprecated Jan 2026) to `gemini-embedding-001`
+  - ✅ Added `EMBEDDING_PROVIDER` config: supports `gemini` (default) or `openai`
+  - ✅ Unified dimension to 1536 for cross-provider compatibility with existing DB vectors
+  - ✅ Added cross-provider mismatch detection (auto-ignores OpenAI model names when using Gemini)
+  - ✅ `embed_query()` and `embed_texts()` methods work with both providers
+  - ✅ Graceful fallback error messages for missing API keys
+- **Updated `config.py`** – Added startup diagnostics to display active provider, model, and API key status
 - Created `services/job_store.py` – Redis-backed job lifecycle: `create_job()` (pushes to `main_queue`), `get_job()`, `mark_success()`, `mark_failed()`, `dequeue()` (BLPOP)
-- Rewrote `worker.py` – full `HybridWorker.hybrid_retrieve()` pipeline: embed query via OpenAI, vector similarity search (pgvector cosine), keyword search (PostgreSQL FTS), Reciprocal Rank Fusion (RRF) for hybrid mode, min_score filtering. Added `run_worker_loop()` that listens on Redis `main_queue` and processes `hybrid_retrieval` jobs with console logging at each step
+- Rewrote `worker.py` – full `HybridWorker.hybrid_retrieve()` pipeline: embed query via configured provider (Gemini or OpenAI), vector similarity search (pgvector cosine), keyword search (PostgreSQL FTS), Reciprocal Rank Fusion (RRF) for hybrid mode, min_score filtering. Added `run_worker_loop()` that listens on Redis `main_queue` and processes `hybrid_retrieval` jobs with console logging at each step
 - Removed `jobs/pdf_processor.py` placeholder
+
+**Dependencies (`requirements.txt`)**
+
+- ✅ Replaced `google-generativeai>=0.7.0` with `google-genai>=1.0.0`
+- ✅ Added `psycopg`, `redis`, `pydantic`, `pydantic-settings`
 
 **API layer (`packages/api/`)**
 
@@ -39,6 +52,12 @@
 - Fixed default API port fallback from 3101 to 3201 in all pages (hybrid-search, research-query, research-query-agent, insight-extraction-agent, linkedin-post-agent)
 - Reduced hybrid-search poll interval from 60s to 5s for faster feedback
 
+**Documentation (`mukDocs/`)**
+
+- ✅ Updated `planning-doc-refined.md` to reflect Gemini embedding support in Phase 3
+- ✅ Updated `phase1-setup-guide.md` with new environment variables (`EMBEDDING_PROVIDER`, `GEMINI_API_KEY`)
+- ✅ Updated `TODO.md` to mark Phase 3 as complete with Gemini migration details
+
 **Architecture alignment with CodingGuidelines.md:**
 
 - Worker processes jobs from Redis queue (not called directly by API)
@@ -47,6 +66,13 @@
 - No mock data
 - Console logs trace job lifecycle (start, steps, scores, completion/failure)
 - Job status model: InProgress (start_time), Success (result + start/end time), Failed (error + start/end time)
+- Multi-provider support allows easy switching between embedding providers
+
+**Migration Notes:**
+
+- **Existing documents** in the DB were embedded with OpenAI. For optimal search quality, consider re-embedding with Gemini.
+- **New documents** ingested will use the configured provider (Gemini by default)
+- Both ingestion and retrieval use the same `EmbeddingService`, ensuring consistency
 
 ### Phase 1 – Foundation (completed earlier)
 
