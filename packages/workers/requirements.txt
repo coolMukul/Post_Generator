@@ -8,7 +8,7 @@ langchain>=0.1.0
 langchain-openai>=0.0.5
 langgraph>=0.0.20
 openai>=1.12.0
-google-generativeai>=0.7.0
+google-genai>=1.0.0
 
 # PDF Processing
 llama-parse>=0.4.0
