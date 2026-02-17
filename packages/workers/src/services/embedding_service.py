@@ -18,10 +18,32 @@ _DEFAULTS = {
 
 
 def _resolve(provider: str):
-    """Return (model, dimension) honoring config overrides."""
+    """Return (model, dimension) for the given provider.
+
+    Ignores EMBEDDING_MODEL / EMBEDDING_DIMENSION overrides when they
+    clearly belong to a different provider (e.g. an OpenAI model name
+    while the provider is gemini).
+    """
     defaults = _DEFAULTS.get(provider, _DEFAULTS["openai"])
-    model = settings.embedding_model or defaults["model"]
-    dimension = settings.embedding_dimension or defaults["dimension"]
+    model = settings.embedding_model
+    dimension = settings.embedding_dimension
+
+    # Detect cross-provider mismatch and fall back to defaults
+    if model:
+        other_providers = {k: v for k, v in _DEFAULTS.items() if k != provider}
+        for other, other_defaults in other_providers.items():
+            if model == other_defaults["model"]:
+                print(
+                    f"[config] WARNING: EMBEDDING_MODEL={model!r} belongs to "
+                    f"{other!r}, not {provider!r} — ignoring override, "
+                    f"using default {defaults['model']!r}"
+                )
+                model = None
+                dimension = None  # reset dimension too since they're paired
+                break
+
+    model = model or defaults["model"]
+    dimension = dimension or defaults["dimension"]
     return model, dimension
 
 
