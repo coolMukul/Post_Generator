@@ -154,8 +154,14 @@ API_PORT=3201
 API_HOST=0.0.0.0
 NODE_ENV=development
 
-# OpenAI
-OPENAI_API_KEY=sk-your_openai_api_key
+# Embedding Provider Configuration
+EMBEDDING_PROVIDER=gemini                    # Options: gemini, openai (default: gemini)
+EMBEDDING_MODEL=gemini-embedding-001         # Model name for chosen provider
+EMBEDDING_DIMENSION=1536                      # Vector dimension (must match DB schema)
+
+# AI API Keys
+GEMINI_API_KEY=your_gemini_api_key           # Required if EMBEDDING_PROVIDER=gemini
+OPENAI_API_KEY=sk-your_openai_api_key        # Required if EMBEDDING_PROVIDER=openai
 
 # LlamaParse
 LLAMA_CLOUD_API_KEY=llx-your_llamaparse_api_key

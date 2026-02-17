@@ -179,7 +179,7 @@ checksum   metadata  + tokens   + context     in pgvector
 
 #### Component 5: Embedding Service
 
-**Purpose:** Generate embeddings for chunks (context + content combined)
+**Purpose:** Generate embeddings for chunks (context + content combined) with multi-provider support
 
 | Input | Output |
 |-------|--------|
@@ -187,11 +187,18 @@ checksum   metadata  + tokens   + context     in pgvector
 
 **Embedding strategy:** Combine context and content before embedding: `{context_summary}\n\n{content}`
 
+**Multi-Provider Support:**
+- **OpenAI**: `text-embedding-3-small` (default)
+- **Google Gemini**: `gemini-embedding-001` (via `google.genai` SDK v1.0.0+)
+- Automatic cross-provider mismatch detection
+- Unified 1536-dimension output for compatibility
+
 **Additional methods:**
 - `embed_query()` for search queries (used by Research Query Agent)
 - `validate_dimension()` to check database schema compatibility
+- Provider-agnostic interface via environment variables
 
-**Python approach:** Use `langchain-openai.OpenAIEmbeddings` with text-embedding-3-small
+**Python approach:** Use `google.genai.Client` for Gemini or `langchain-openai.OpenAIEmbeddings` for OpenAI based on `EMBEDDING_PROVIDER` setting
 
 ---
 
@@ -264,7 +271,7 @@ src/
 | PDF Parsing | llama-parse |
 | Text Splitting | langchain-text-splitters |
 | Token Counting | tiktoken |
-| LLM & Embeddings | langchain-openai, openai |
+| LLM & Embeddings | langchain-openai, openai, google-genai |
 | Database | asyncpg, sqlalchemy, pgvector |
 | HTTP Client | httpx |
 | Validation | pydantic |
@@ -277,8 +284,10 @@ src/
 | Variable | Purpose |
 |----------|---------|
 | LLAMA_CLOUD_API_KEY | LlamaParse API access |
-| OPENAI_API_KEY | Embeddings and context generation |
-| EMBEDDING_MODEL | Model name (default: text-embedding-3-small) |
+| EMBEDDING_PROVIDER | Provider choice: `openai` or `gemini` (default: gemini) |
+| OPENAI_API_KEY | OpenAI embeddings and context generation (if provider=openai) |
+| GEMINI_API_KEY | Google Gemini embeddings (if provider=gemini) |
+| EMBEDDING_MODEL | Model name (default: gemini-embedding-001 or text-embedding-3-small) |
 | EMBEDDING_DIMENSION | Vector size (default: 1536) |
 | CHUNK_SIZE | Target chunk size (default: 1000) |
 | CHUNK_OVERLAP | Overlap between chunks (default: 200) |
@@ -290,7 +299,7 @@ src/
 ---
 
 ### Phase 3: Hardened Hybrid Retrieval & Indexing ✅
-**Goal:** Production-quality retrieval layer
+**Goal:** Production-quality retrieval layer with multi-provider embedding support
 
 **Completed:**
 - [x] Validated schema with pgvector embedding and index
@@ -298,8 +307,16 @@ src/
 - [x] Automated index maintenance and reindex scripts
 - [x] End-to-end tests for vector and keyword search
 - [x] Job renaming to `hybrid_retrieval`, updated producers/workers
+- [x] **Multi-provider embedding support:**
+  - [x] Migrated from deprecated `google.generativeai` to `google.genai` SDK (v1.0.0+)
+  - [x] Updated default model from `text-embedding-004` (deprecated Jan 2026) to `gemini-embedding-001`
+  - [x] Added cross-provider mismatch detection (auto-ignores OpenAI model names when using Gemini)
+  - [x] Unified dimension to 1536 for cross-provider compatibility
+  - [x] Added startup diagnostics in `config.py` to display active provider/model/key status
+  - [x] Updated `requirements.txt` with `google-genai>=1.0.0`
+  - [x] Supports both OpenAI (`text-embedding-3-small`) and Google Gemini (`gemini-embedding-001`)
 
-**Learning focus:** Production readiness for vector stores, index tuning for ivfflat, reliable embedding serialization
+**Learning focus:** Production readiness for vector stores, index tuning for ivfflat, reliable embedding serialization, multi-provider LLM/embedding architecture
 
 **Estimated Time:** 8-12 hours
 
