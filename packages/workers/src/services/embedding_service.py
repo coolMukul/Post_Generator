@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Provider-specific defaults
 _DEFAULTS = {
     "openai": {"model": "text-embedding-3-small", "dimension": 1536},
-    "gemini": {"model": "gemini-embedding-001", "dimension": 768},
+    "gemini": {"model": "gemini-embedding-001", "dimension": 1536},
 }
 
 
