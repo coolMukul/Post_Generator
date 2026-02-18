@@ -220,12 +220,9 @@ async def agent_run(req: AgentRunSubmitRequest):
                 status_code=400,
                 detail=f"Unknown agent: {req.agentName}. Use GET /agent/list to see available agents.",
             )
-        if not _agent_registry.has_agent(req.agentName):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Agent '{req.agentName}' has a manifest but no registered implementation. "
-                f"Available registered agents: {[a['name'] for a in _agent_registry.list_agents() if a['registered']]}",
-            )
+        # Note: agent classes are registered in the worker process, not the API.
+        # The API only validates that the manifest exists; the worker handles
+        # instantiation and will report errors if the class is missing.
 
     job_data = {
         "agent_name": req.agentName,

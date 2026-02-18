@@ -35,9 +35,15 @@ def generate_draft(state: Dict[str, Any]) -> Dict[str, Any]:
         state["steps_log"] = state.get("steps_log", []) + ["draft_generation: no insights"]
         return state
 
-    if settings.openai_api_key:
+    use_gemini = (
+        settings.gemini_api_key
+        and (settings.embedding_provider == "gemini" or not settings.openai_api_key)
+    )
+    use_openai = settings.openai_api_key and not use_gemini
+
+    if use_openai:
         draft = _generate_with_openai(query, insights)
-    elif settings.gemini_api_key:
+    elif use_gemini:
         draft = _generate_with_gemini(query, insights)
     else:
         _log("template", "No LLM key — using template-based draft")

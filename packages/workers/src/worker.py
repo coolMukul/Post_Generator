@@ -274,7 +274,18 @@ def _generate_linkedin_post(
     prompt = _build_linkedin_prompt(title, insights, tone, max_length)
     post_text = ""
 
-    if settings.openai_api_key:
+    # Respect EMBEDDING_PROVIDER to decide which LLM to call first.
+    # When provider is "gemini", prefer Gemini even if an OpenAI key exists.
+    use_gemini = (
+        settings.gemini_api_key
+        and (settings.embedding_provider == "gemini" or not settings.openai_api_key)
+    )
+    use_openai = (
+        settings.openai_api_key
+        and not use_gemini
+    )
+
+    if use_openai:
         logger.info("[linkedin_post] Generating via OpenAI gpt-4o-mini")
         from openai import OpenAI
 
@@ -290,7 +301,7 @@ def _generate_linkedin_post(
         )
         post_text = response.choices[0].message.content.strip()
 
-    elif settings.gemini_api_key:
+    elif use_gemini:
         logger.info("[linkedin_post] Generating via Gemini 2.0 Flash")
         from google import genai
 
