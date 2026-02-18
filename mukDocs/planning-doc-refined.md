@@ -358,7 +358,7 @@ src/
 ---
 
 ### Phase 5: Multi-Stage Content Agents
-**Goal:** Build orchestration agents as multi-node workflows
+**Goal:** Build orchestration agents as multi-node workflows using langraph
 
 **Content Generation Agents:**
 - [ ] **Insight Extraction Agent** - Extracts structured insights (key findings, claims, relevance) from documents using `summarize_chunk` and `get_abstract`
@@ -452,12 +452,12 @@ Each agent includes:
 
 ## Technology Stack
 
-### Chosen Stack (Same Tech, Original Code)
+### Chosen Stack
 - **Frontend:** Next.js 15 (App Router, SSR)
 - **Backend:** Fastify with Swagger/OpenAPI
 - **Database:** PostgreSQL with pgvector
 - **Queue:** Redis + BullMQ
-- **AI:** LangChain, LangGraph
+- **AI Agents:** LangChain, LangGraph
 - **Embeddings:** Multi-provider (OpenAI, Voyage, Cohere)
 
 Ubuntu is installed on a Win 11 machine. User has sudo permissions. Ubuntu has Redis,  postgresql v14 and postgresql v16 installed with pgvector. Project uses postgresql v16.
