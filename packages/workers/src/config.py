@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Google Gemini
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
 
+    # LLM provider: "gemini" or "openai"
+    llm_provider: str = Field(default="gemini", alias="LLM_PROVIDER")
+    llm_model: str | None = Field(default=None, alias="LLM_MODEL")
+
     # LlamaParse
     llama_cloud_api_key: str | None = Field(default=None, alias="LLAMA_CLOUD_API_KEY")
 
@@ -65,6 +69,7 @@ else:
     print("[config]   -> copy .env.example to .env and fill in your keys!")
 
 print(f"[config] EMBEDDING_PROVIDER={settings.embedding_provider}")
+print(f"[config] LLM_PROVIDER={settings.llm_provider}")
 
 if settings.embedding_provider == "gemini" and not settings.gemini_api_key:
     print("[config] ERROR: EMBEDDING_PROVIDER=gemini but GEMINI_API_KEY is not set!")

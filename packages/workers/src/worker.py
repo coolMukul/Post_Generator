@@ -1,8 +1,12 @@
-"""Hybrid retrieval worker.
+"""Worker — processes all jobs from the Redis main_queue.
 
-Processes jobs from the Redis main_queue.  Each job runs the
-hybrid_retrieve pipeline: embed query -> vector search -> keyword search
--> fuse results with Reciprocal Rank Fusion (RRF) -> return ranked list.
+Handles:
+  - hybrid_retrieval: Phase 3 hybrid search pipeline
+  - research_query_agent: Phase 4 Research Query Agent
+  - insight_extraction_agent: Phase 4/5 Insight Extraction Agent
+  - linkedin_post_agent: Phase 5 LinkedIn Post Generator Agent
+  - citation_validator_agent: Phase 4 Citation Validator Agent
+  - content_strategy_agent: Phase 5 Content Strategy Orchestrator
 
 Guidelines followed:
   - All business logic lives here, not in the API layer.
@@ -20,6 +24,7 @@ from .repositories.vector_repository import VectorRepository
 from .repositories.document_repository import DocumentRepository
 from .services.embedding_service import EmbeddingService
 from .services.job_store import JobStore
+from .agents import get_agent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -241,7 +246,13 @@ def run_worker_loop():
                 response = worker.hybrid_retrieve(request)
                 worker.job_store.mark_success(job_id, response.model_dump())
             else:
-                worker.job_store.mark_failed(job_id, f"Unknown job type: {job_type}")
+                agent = get_agent(job_type)
+                if agent is not None:
+                    logger.info("Dispatching to agent: %s", agent.name)
+                    result = agent.run(job["data"])
+                    worker.job_store.mark_success(job_id, result)
+                else:
+                    worker.job_store.mark_failed(job_id, f"Unknown job type: {job_type}")
 
         except Exception as exc:
             logger.exception("Job FAILED  id=%s  error=%s", job_id, exc)

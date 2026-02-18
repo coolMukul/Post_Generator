@@ -2,14 +2,100 @@
 
 ## Upcoming Changes
 
-- Phase 4: Agent Framework & Core Tools (Research Query Agent, Citation Validator)
 - Phase 2: Document ingestion pipeline end-to-end test via UI ingest page
+- Add unit tests for Phase 4-5 agents (Phase4-agent tests, Phase5-content tests)
 - Add unit tests for hybrid_retrieve (Phase3-hybrid-retrieve tests)
 - Add tsvector GIN index on document_vectors.content for faster keyword search
+- Phase 6: Security & Deployment (secrets management, Docker Compose, auth)
 
 ---
 
 ## Completed Changes
+
+### Phase 4 & 5 – Agent Framework, Core Tools & Multi-Stage Content Agents (2026-02-18) ✅
+
+**Agent Framework (`packages/workers/src/agents/`)**
+
+- Created `agents/base.py` – AgentBase class with step-level logging (`[Agent:<name>][step:<tool>]`), execution timing (start/end/duration), LLM call counting, resource limit enforcement (time + LLM calls), step trail accumulation for audit
+- Created `agents/registry.py` – Agent registry with `@register_agent` decorator, `get_agent(job_type)` lookup, `list_agents()` for manifest enumeration
+- All agents use LangGraph StateGraph with typed state, `START` → nodes → `END` edges
+- Each agent includes: manifest (name, version, tools, resource limits), Pydantic input/output contract, step-level console logging, job_type for worker dispatch
+
+**Core Tools (`packages/workers/src/tools/`)**
+
+- Created `tools/search_papers.py` – wraps `HybridWorker.hybrid_retrieve()` for agent use, does NOT rebuild retrieval logic
+- Created `tools/get_abstract.py` – fetches document metadata/abstract from `DocumentRepository`
+- Created `tools/summarize_chunk.py` – LLM-based chunk summarization via `LLMService`
+- Created `tools/cite_source.py` – LLM-based citation verification and formatting
+
+**LLM Service (`packages/workers/src/services/llm_service.py`)**
+
+- Multi-provider LLM service mirroring EmbeddingService pattern
+- Supports Gemini (default: `gemini-2.0-flash`) and OpenAI (`gpt-4o-mini`)
+- `LLM_PROVIDER` and `LLM_MODEL` env vars for configuration
+- `chat()` for plain text responses, `chat_json()` for structured JSON responses
+- Lazy client initialization, provider diagnostics on startup
+
+**Phase 4 Agents:**
+
+- ✅ **Research Query Agent** (`research_query_agent.py`) – LangGraph StateGraph: search → rank → explain. Wraps Phase 3 hybrid retrieval via `search_papers` tool, uses LLM to generate relevance explanations for top results. Returns results with `relevanceReason`, `agentSteps`, `executionTimeMs`
+- ✅ **Citation Validator Agent** (`citation_validator_agent.py`) – LangGraph StateGraph: retrieve_source → verify_claim → format_citation. Verifies claim provenance against source chunks, outputs verified/confidence/formatted_citation
+
+**Phase 5 Agents:**
+
+- ✅ **Insight Extraction Agent** (`insight_extraction_agent.py`) – LangGraph StateGraph: retrieve → extract → structure. Retrieves corpus chunks, uses LLM to extract structured insights (claim, summary, confidence, tags), links evidence to source chunks
+- ✅ **LinkedIn Post Generator Agent** (`linkedin_post_agent.py`) – LangGraph StateGraph: headline → draft → format. Generates A/B headline candidates, writes full post with tone control, produces hashtags. Enforces max length
+- ✅ **Content Strategy Orchestrator** (`content_strategy_agent.py`) – Meta-agent LangGraph StateGraph: research → insights → post → review. Chains retrieval, insight extraction, and post generation into a single end-to-end pipeline. Includes HITL-ready review checkpoint
+
+**Agent Pydantic Schemas (`packages/workers/src/models/agent_schemas.py`)**
+
+- `AgentManifest`, `AgentResourceLimits` – agent identity and constraints
+- `ResearchQueryRequest/Response`, `ResearchQueryResultItem` – research query I/O
+- `CitationRequest/Result` – citation validator I/O
+- `InsightExtractionRequest/Response`, `InsightItem`, `EvidenceItem` – insight extraction I/O
+- `LinkedInPostRequest/Response`, `InsightInput` – LinkedIn post I/O
+- `ContentStrategyRequest/Response` – content strategy orchestrator I/O
+
+**Config Updates (`packages/workers/src/config.py`)**
+
+- Added `LLM_PROVIDER` (default: `gemini`) and `LLM_MODEL` settings
+- Startup diagnostics now display LLM provider alongside embedding provider
+
+**Worker Loop (`packages/workers/src/worker.py`)**
+
+- Extended `run_worker_loop()` to dispatch agent jobs via `get_agent(job_type)` from the registry
+- `hybrid_retrieval` jobs still handled directly by `HybridWorker`
+- All other job types resolved via agent registry: `research_query_agent`, `insight_extraction_agent`, `linkedin_post_agent`, `citation_validator_agent`, `content_strategy_agent`
+- Unknown job types marked FAILED with error message
+
+**API Endpoints (`packages/api/app/main.py`)**
+
+- Added `POST /agent/research-query` – submits `research_query_agent` job, returns `{ success, jobId }`
+- Added `POST /agent/insight-extraction` – submits `insight_extraction_agent` job, returns `{ success, jobId }`
+- Added `POST /agent/linkedin-post` – submits `linkedin_post_agent` job, returns `{ success, jobId }`
+- All agent endpoints use existing `GET /queue/jobs/{job_id}` for polling
+- API version bumped to 0.4.0
+
+**Dependencies (`packages/workers/requirements.txt`)**
+
+- Updated `langgraph>=0.2.0` (from `>=0.0.20`) for modern StateGraph API
+
+**Documentation (`mukDocs/`)**
+
+- Created `ARC-comms.md` – ARC team communication log with session start, task assignments, architecture decisions
+- Updated `TODO.md` with Phase 4-5 completion details
+
+**Architecture alignment with CodingGuidelines.md:**
+
+- All business logic in workers (agents, tools, services) — API is thin job submission layer
+- Single `main_queue` for all job types (hybrid retrieval + all agents)
+- Console logs trace every agent step with `[Agent:<name>][step:<tool>]` convention
+- Job status model preserved: InProgress → Success/Failed
+- Real LLM API calls (Gemini/OpenAI) — no mocks in production code
+- No fallback code, no TODO comments in code
+- Pydantic validation on all agent inputs/outputs
+
+---
 
 ### Phase 3 – Hybrid Retrieval Rewrite + Gemini Embedding Migration (2026-02-17) ✅
 

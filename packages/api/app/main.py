@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # App & middleware
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Post Generator API", version="0.2.0")
+app = FastAPI(title="Post Generator API", version="0.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,6 +77,30 @@ class SearchSubmitRequest(BaseModel):
     vectorWeight: float = Field(default=0.7, ge=0.0, le=1.0)
     keywordWeight: float = Field(default=0.3, ge=0.0, le=1.0)
     documentId: Optional[str] = None
+
+
+class ResearchQuerySubmitRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    maxResults: int = Field(default=10, ge=1, le=50)
+    minScore: float = Field(default=0.0, ge=0.0, le=1.0)
+    includeContext: bool = Field(default=True)
+
+
+class InsightExtractionSubmitRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    maxResults: int = Field(default=10, ge=1, le=50)
+    minScore: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class InsightInput(BaseModel):
+    claim: str
+
+
+class LinkedInPostSubmitRequest(BaseModel):
+    title: str = Field(default="")
+    insights: list[InsightInput] = Field(default_factory=list)
+    tone: str = Field(default="professional")
+    maxLength: int = Field(default=700, ge=100, le=2000)
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +158,50 @@ async def search_submit(req: SearchSubmitRequest):
     job_id = _job_store.create_job("hybrid_retrieval", job_data)
     logger.info("Search job submitted: id=%s  query=%r", job_id, req.query)
     return {"jobId": job_id}
+
+
+# ---------------------------------------------------------------------------
+# Agent endpoints — Phase 4 & 5
+# ---------------------------------------------------------------------------
+@app.post("/agent/research-query")
+async def agent_research_query(req: ResearchQuerySubmitRequest):
+    """Submit a research_query_agent job to the worker queue."""
+    job_data = {
+        "query": req.query,
+        "maxResults": req.maxResults,
+        "minScore": req.minScore,
+        "includeContext": req.includeContext,
+    }
+    job_id = _job_store.create_job("research_query_agent", job_data)
+    logger.info("Research query agent job submitted: id=%s  query=%r", job_id, req.query)
+    return {"success": True, "jobId": job_id}
+
+
+@app.post("/agent/insight-extraction")
+async def agent_insight_extraction(req: InsightExtractionSubmitRequest):
+    """Submit an insight_extraction_agent job to the worker queue."""
+    job_data = {
+        "query": req.query,
+        "maxResults": req.maxResults,
+        "minScore": req.minScore,
+    }
+    job_id = _job_store.create_job("insight_extraction_agent", job_data)
+    logger.info("Insight extraction agent job submitted: id=%s  query=%r", job_id, req.query)
+    return {"success": True, "jobId": job_id}
+
+
+@app.post("/agent/linkedin-post")
+async def agent_linkedin_post(req: LinkedInPostSubmitRequest):
+    """Submit a linkedin_post_agent job to the worker queue."""
+    job_data = {
+        "title": req.title,
+        "insights": [ins.model_dump() for ins in req.insights],
+        "tone": req.tone,
+        "maxLength": req.maxLength,
+    }
+    job_id = _job_store.create_job("linkedin_post_agent", job_data)
+    logger.info("LinkedIn post agent job submitted: id=%s  title=%r", job_id, req.title)
+    return {"success": True, "jobId": job_id}
 
 
 @app.get("/queue/jobs/{job_id}")
