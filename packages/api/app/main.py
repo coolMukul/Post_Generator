@@ -111,6 +111,17 @@ class ContentPipelineSubmitRequest(BaseModel):
     minScore: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class LinkedInPostInsight(BaseModel):
+    claim: str = Field(..., min_length=1)
+
+
+class LinkedInPostRequest(BaseModel):
+    title: str = Field(default="")
+    insights: List[LinkedInPostInsight] = Field(default_factory=list)
+    tone: str = Field(default="professional")
+    maxLength: int = Field(default=700, ge=100, le=2000)
+
+
 # ---------------------------------------------------------------------------
 # Phase 3 Endpoints
 # ---------------------------------------------------------------------------
@@ -260,6 +271,27 @@ async def content_pipeline(req: ContentPipelineSubmitRequest):
     job_id = _job_store.create_job("content_pipeline", job_data)
     logger.info("Content pipeline submitted: id=%s  query=%r", job_id, req.query)
     return {"jobId": job_id}
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn Post Generator Endpoint
+# ---------------------------------------------------------------------------
+@app.post("/agent/linkedin-post")
+async def linkedin_post(req: LinkedInPostRequest):
+    """Submit a linkedin_post job to the worker queue.
+
+    The worker generates a LinkedIn-ready post from the provided insights
+    using an LLM (OpenAI or Gemini). Poll via GET /queue/jobs/{jobId}.
+    """
+    job_data = {
+        "title": req.title,
+        "insights": [ins.claim for ins in req.insights],
+        "tone": req.tone,
+        "max_length": req.maxLength,
+    }
+    job_id = _job_store.create_job("linkedin_post", job_data)
+    logger.info("LinkedIn post job submitted: id=%s  title=%r", job_id, req.title)
+    return {"success": True, "jobId": job_id}
 
 
 # ---------------------------------------------------------------------------

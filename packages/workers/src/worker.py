@@ -5,6 +5,7 @@ Processes jobs from the Redis main_queue.  Supported job types:
     -> fuse results with Reciprocal Rank Fusion (RRF) -> return ranked list.
   - agent_run: instantiate an agent via the AgentRegistry and run it.
   - content_pipeline: run the Phase 5 multi-stage content workflow.
+  - linkedin_post: generate a LinkedIn post from insights via LLM.
 
 Guidelines followed:
   - All business logic lives here, not in the API layer.
@@ -243,6 +244,89 @@ def _init_agent_registry() -> AgentRegistry:
 
 
 # ------------------------------------------------------------------
+# LinkedIn post generation
+# ------------------------------------------------------------------
+
+def _build_linkedin_prompt(title: str, insights: List[str], tone: str, max_length: int) -> str:
+    """Build the LLM prompt for LinkedIn post generation."""
+    insight_block = "\n".join(f"- {ins}" for ins in insights)
+    topic = title if title else "the following insights"
+    return (
+        f"Write a LinkedIn post about '{topic}'.\n\n"
+        f"Key Insights:\n{insight_block}\n\n"
+        f"Requirements:\n"
+        f"- Tone: {tone}\n"
+        f"- Maximum length: {max_length} characters\n"
+        f"- Start with an attention-grabbing hook\n"
+        f"- Include key points backed by the insights\n"
+        f"- End with a call-to-action or thought-provoking question\n"
+        f"- Include 3-5 relevant hashtags at the very end on a new line\n"
+        f"- Do NOT wrap the post in quotes or markdown\n"
+    )
+
+
+def _generate_linkedin_post(
+    title: str, insights: List[str], tone: str, max_length: int
+) -> Dict[str, Any]:
+    """Generate a LinkedIn post from insights via LLM, returning {post, hashtags, length}."""
+    from .config import settings
+
+    prompt = _build_linkedin_prompt(title, insights, tone, max_length)
+    post_text = ""
+
+    if settings.openai_api_key:
+        logger.info("[linkedin_post] Generating via OpenAI gpt-4o-mini")
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an expert LinkedIn content writer."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=800,
+            temperature=0.7,
+        )
+        post_text = response.choices[0].message.content.strip()
+
+    elif settings.gemini_api_key:
+        logger.info("[linkedin_post] Generating via Gemini 2.0 Flash")
+        from google import genai
+
+        client = genai.Client(api_key=settings.gemini_api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"You are an expert LinkedIn content writer.\n\n{prompt}",
+        )
+        post_text = response.text.strip()
+
+    else:
+        logger.info("[linkedin_post] No LLM key — using template fallback")
+        lines = []
+        if title:
+            lines.append(f"🚀 {title}\n")
+        for ins in insights:
+            lines.append(f"• {ins}")
+        lines.append("\nWhat are your thoughts? Let me know in the comments!")
+        lines.append("\n#insights #linkedin #knowledge")
+        post_text = "\n".join(lines)
+
+    # Extract hashtags from the post (lines starting with # or containing #word)
+    import re
+    hashtag_matches = re.findall(r"#\w+", post_text)
+    hashtags = list(dict.fromkeys(hashtag_matches))  # dedupe, preserve order
+
+    logger.info("[linkedin_post] Generated %d chars, %d hashtags", len(post_text), len(hashtags))
+
+    return {
+        "post": post_text,
+        "hashtags": hashtags,
+        "length": len(post_text),
+    }
+
+
+# ------------------------------------------------------------------
 # Worker loop – listens on Redis main_queue
 # ------------------------------------------------------------------
 
@@ -306,6 +390,17 @@ def run_worker_loop():
                     run_id=job_id,
                 )
                 worker.job_store.mark_success(job_id, pipeline_result)
+
+            elif job_type == "linkedin_post":
+                data = job["data"]
+                logger.info("[Agent:Worker][step:linkedin_post] run_id=%s", job_id)
+                result = _generate_linkedin_post(
+                    title=data.get("title", ""),
+                    insights=data.get("insights", []),
+                    tone=data.get("tone", "professional"),
+                    max_length=data.get("max_length", 700),
+                )
+                worker.job_store.mark_success(job_id, result)
 
             else:
                 worker.job_store.mark_failed(job_id, f"Unknown job type: {job_type}")
