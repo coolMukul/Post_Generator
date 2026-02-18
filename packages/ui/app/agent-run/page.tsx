@@ -98,6 +98,9 @@ export default function AgentRunPage() {
           }),
         });
         const data = await res.json();
+        if (!res.ok || !data.jobId) {
+          throw new Error(data.detail || data.error || `API error ${res.status}`);
+        }
         jobId = data.jobId;
         agentName = 'ContentPipeline';
       } else {
@@ -115,8 +118,11 @@ export default function AgentRunPage() {
           }),
         });
         const data = await res.json();
+        if (!res.ok || !data.jobId) {
+          throw new Error(data.detail || data.error || `API error ${res.status}`);
+        }
         jobId = data.jobId;
-        agentName = data.agentName;
+        agentName = data.agentName || selectedAgent;
       }
 
       const entry: RunEntry = {
@@ -131,8 +137,18 @@ export default function AgentRunPage() {
 
       setRuns(prev => [entry, ...prev]);
       pollJob(jobId, agentName);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Submit error:', err);
+      const errorEntry: RunEntry = {
+        jobId: `error-${Date.now()}`,
+        agentName: runType === 'pipeline' ? 'ContentPipeline' : selectedAgent,
+        status: 'failed',
+        result: null,
+        error: err?.message || String(err),
+        startTime: new Date().toISOString(),
+        endTime: new Date().toISOString(),
+      };
+      setRuns(prev => [errorEntry, ...prev]);
     } finally {
       setLoading(false);
     }
@@ -332,7 +348,7 @@ export default function AgentRunPage() {
                 <div>
                   <span style={{ fontWeight: '600', color: 'white' }}>{run.agentName}</span>
                   <span style={{ marginLeft: '0.75rem', fontSize: '0.75rem', color: '#999' }}>
-                    {run.jobId.slice(0, 8)}...
+                    {run.jobId ? `${run.jobId.slice(0, 8)}...` : 'N/A'}
                   </span>
                 </div>
                 <span
