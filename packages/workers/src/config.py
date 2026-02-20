@@ -76,6 +76,11 @@ if settings.embedding_provider == "gemini" and not settings.gemini_api_key:
 elif settings.embedding_provider == "openai" and not settings.openai_api_key:
     print("[config] ERROR: EMBEDDING_PROVIDER=openai but OPENAI_API_KEY is not set!")
 
+if settings.llm_provider == "gemini" and not settings.gemini_api_key:
+    print("[config] ERROR: LLM_PROVIDER=gemini but GEMINI_API_KEY is not set!")
+elif settings.llm_provider == "openai" and not settings.openai_api_key:
+    print("[config] ERROR: LLM_PROVIDER=openai but OPENAI_API_KEY is not set!")
+
 
 def get_database_url() -> str:
     """Get database connection URL."""
