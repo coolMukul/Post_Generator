@@ -49,6 +49,6 @@ def summarize_chunk(
     user_prompt = f"{context_prefix}\n\nChunk text:\n{content}" if context_prefix else content
 
     llm = _get_llm()
-    summary = llm.chat(system_prompt, user_prompt)
+    summary = llm.chat(system_prompt, user_prompt, model="lite")
     logger.info("[Tool:summarize_chunk] summary_len=%d", len(summary))
     return summary

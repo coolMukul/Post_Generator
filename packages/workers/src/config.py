@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # LLM provider: "gemini" or "openai"
     llm_provider: str = Field(default="gemini", alias="LLM_PROVIDER")
     llm_model: str | None = Field(default=None, alias="LLM_MODEL")
+    llm_model_lite: str | None = Field(default=None, alias="LLM_MODEL_LITE")
 
     # LlamaParse
     llama_cloud_api_key: str | None = Field(default=None, alias="LLAMA_CLOUD_API_KEY")

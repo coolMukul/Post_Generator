@@ -132,7 +132,7 @@ class ResearchQueryAgent(AgentBase):
 
         llm = self._get_llm()
         self.track_llm_call()
-        reasons = llm.chat_json(system_prompt, user_prompt)
+        reasons = llm.chat_json(system_prompt, user_prompt, model="lite")
 
         if isinstance(reasons, dict):
             reasons = list(reasons.values())

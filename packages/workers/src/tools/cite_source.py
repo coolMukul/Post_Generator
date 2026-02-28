@@ -54,7 +54,7 @@ def cite_source(
     )
 
     llm = _get_llm()
-    result = llm.chat_json(system_prompt, user_prompt)
+    result = llm.chat_json(system_prompt, user_prompt, model="lite")
 
     citation = {
         "verified": bool(result.get("verified", False)),
